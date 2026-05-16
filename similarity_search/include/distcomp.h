@@ -1,13 +1,12 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
@@ -23,7 +22,10 @@
 #include <cstdlib>
 #include <limits>
 
+#include <portable_popcount.h>
+
 #include "permutation_type.h"
+#include "idtype.h"
 
 namespace similarity {
 
@@ -184,6 +186,31 @@ template <typename T> T LPGenericDistance(const T* x, const T* y, const int leng
 
 template <typename T> T LPGenericDistanceOptim(const T* x, const T* y, const int length, const T p);
 
+/*
+ * Various less-standard divergences
+ */
+
+/*
+ * Alpha-beta divergence.
+ * 
+ * Póczos, Barnabás, Liang Xiong, Dougal J. Sutherland, and Jeff Schneider (2012). “Nonparametric kernel
+ * estimators for image classification”. In: Computer Vision and Pattern Recognition (CVPR), 2012 IEEE
+ * Conference on, pages 2989–2996
+ */
+template <typename T> T alphaBetaDivergenceSlow(const T *x, const T *y, const int length, float alpha,float beta);
+template <typename T> T alphaBetaDivergenceFast(const T *x, const T *y, const int length, float alpha, float beta);
+
+// A proxy function for alpha-beta divergence that may be used during indexing
+template <typename T> T alphaBetaDivergenceSlowProxy(const T *x, const T *y, const int length, float alpha, float beta);
+template <typename T> T alphaBetaDivergenceFastProxy(const T *x, const T *y, const int length, float alpha, float beta);
+/*
+ * Renyi divergence.
+ * Rényi, Alfréd (1961). "On measures of information and entropy". 
+ * Proceedings of the fourth Berkeley Symposium on Mathematics, Statistics and Probability 1960. pp. 547–561. 
+ */
+template <typename T> T renyiDivergenceSlow(const T *x, const T *y, const int length, float alpha);
+template <typename T> T renyiDivergenceFast(const T *x, const T *y, const int length, float alpha);
+
 
 /*
  * Rank correlations
@@ -196,10 +223,20 @@ int SpearmanRho(const PivotIdType* x, const PivotIdType* y, size_t qty);
 int SpearmanFootruleSIMD(const PivotIdType* x, const PivotIdType* y, size_t qty);
 int SpearmanRhoSIMD(const PivotIdType* x, const PivotIdType* y, size_t qty);
 
+template <typename dist_t, typename dist_uint_t>
+dist_t inline BitJaccard(const dist_uint_t* a, const dist_uint_t* b, size_t qty) {
+  dist_uint_t num = 0, den = 0;
+
+  for (size_t i=0; i < qty; ++i) {
+    //  __builtin_popcount quickly computes the number on 1s
+    num +=  __builtin_popcount(a[i] & b[i]);
+    den +=  __builtin_popcount(a[i] | b[i]);
+  }
+
+  return 1  - (dist_t(num) / dist_t(den));
+}
+
 //unsigned BitHamming(const uint32_t* a, const uint32_t* b, size_t qty);
-
-#include "simdutils.h"
-
 
 unsigned inline BitHamming(const uint32_t* a, const uint32_t* b, size_t qty) {
   unsigned res = 0;
@@ -212,12 +249,36 @@ unsigned inline BitHamming(const uint32_t* a, const uint32_t* b, size_t qty) {
   return res;
 }
 
+// Returns the size of the intersection
+unsigned IntersectSizeScalarFast(const IdType *pArr1, size_t qty1, const IdType *pArr2, size_t qty2);
+unsigned IntersectSizeScalarStand(const IdType *pArr1, size_t qty1, const IdType *pArr2, size_t qty2);
+unsigned IntersectSizeScalar3way(const IdType *pArr1, size_t qty1, const IdType *pArr2, size_t qty2, const IdType* pArr3, size_t qty3);
+
+inline float JaccardSparse(const IdType *pArr1, size_t qty1, const IdType *pArr2, size_t qty2) {
+  if (!qty1 || !qty2) return 0; // let's say it's perfect overlap
+  unsigned qtyInter = IntersectSizeScalarFast(pArr1, qty1, pArr2, qty2);
+  float    qtyS = qty1 + qty2;
+  return 1 - qtyInter/(qtyS - qtyInter);
 }
 
+// For SIFT vectors (whose dim=128) int is enough to store the smallest and the largest difference
+typedef int DistTypeSIFT;
+
+const uint_fast32_t SIFT_DIM = 128;
+
+// All SIFT vectors are expected to have the same dimensionality (SIFT_DIM)
+DistTypeSIFT l2SqrSIFTNaive(const uint8_t* pVect1, const uint8_t* pVect2);
+DistTypeSIFT l2SqrSIFTPrecomp(const uint8_t* pVect1, const uint8_t* pVect2);
+DistTypeSIFT l2SqrSIFTPrecompSSE2(const uint8_t* pVect1, const uint8_t* pVect2);
+DistTypeSIFT l2SqrSIFTPrecompAVX(const uint8_t* pVect1, const uint8_t* pVect2);
+
+}
+
+
 /*
- * Edit distances
+ * Edit distances not included into the similarity space,
+ * because the namespace is specified in the distcomp_edist.h
  */
 #include "distcomp_edist.h"
-
 
 #endif

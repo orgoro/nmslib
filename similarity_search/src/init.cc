@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #include "init.h"
 
 /*
@@ -28,12 +26,20 @@
 
 #include "logging.h"
 
+#include <iostream>
+#include <memory>
+
 namespace similarity {
 
-void initLibrary(LogChoice choice, const char* pLogFile) {
+int                                                 defaultRandomSeed = 0;
+thread_local std::unique_ptr<RandomGeneratorType>   randomGen;
+
+void initLibrary(int seed, LogChoice choice, const char* pLogFile) {
+  defaultRandomSeed = seed;
+
+  std::ios_base::sync_with_stdio(false);
   InitializeLogger(choice, pLogFile);
   initSpaces();
   initMethods();
 }
-
 }

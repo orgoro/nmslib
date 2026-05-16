@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #ifndef _PERMUTATION_PREFIX_INDEX_H_
 #define _PERMUTATION_PREFIX_INDEX_H_
 
@@ -56,8 +54,8 @@ class PermutationPrefixIndex : public Index<dist_t> {
  private:
 
   size_t computeDbScan(size_t K) const {
-    if (knn_amp_) { return min(K * knn_amp_, data_.size()); }
-    return static_cast<size_t>(min(min_candidate_, data_.size()));
+    if (knn_amp_) { return min(K * knn_amp_, this->data_.size()); }
+    return static_cast<size_t>(min(min_candidate_, this->data_.size()));
   }
 
 
@@ -65,7 +63,6 @@ class PermutationPrefixIndex : public Index<dist_t> {
   void GenSearch(QueryType* query, size_t K) const;
 
   const Space<dist_t>&  space_;
-  const ObjectVector&   data_;
   bool                  PrintProgress_;
 
   // permutation prefix length (l in the original paper) in (0, num_pivot]

@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #ifndef _SPACE_SPARSE_SCALAR_H_
 #define _SPACE_SPARSE_SCALAR_H_
 
@@ -29,6 +27,7 @@
 #include "space.h"
 #include "space_sparse_vector.h"
 #include "distcomp.h"
+#include "my_isnan_isinf.h"
 
 #define SPACE_SPARSE_COSINE_SIMILARITY          "cosinesimil_sparse"
 #define SPACE_SPARSE_ANGULAR_DISTANCE           "angulardist_sparse"
@@ -44,7 +43,7 @@ class SpaceSparseAngularDistance : public SpaceSparseVectorSimpleStorage<dist_t>
   virtual ~SpaceSparseAngularDistance() {}
 
   virtual std::string StrDesc() const {
-    return "AngularDistance";
+    return SPACE_SPARSE_ANGULAR_DISTANCE;
   }
 
  protected:
@@ -57,7 +56,7 @@ class SpaceSparseAngularDistance : public SpaceSparseVectorSimpleStorage<dist_t>
     dist_t operator()(const dist_t* x, const dist_t* y, size_t length) const {
       dist_t val = AngularDistance(x, y, length);
       // This shouldn't normally happen, but let's keep this check
-      if (std::isnan(val)) throw runtime_error("SpaceAngularDist Bug: NAN dist!!!!");
+      if (my_isnan(val)) throw runtime_error("SpaceAngularDist Bug: NAN dist!!!!");
       return val;
     }
   };
@@ -72,7 +71,7 @@ class SpaceSparseCosineSimilarity : public SpaceSparseVectorSimpleStorage<dist_t
   virtual ~SpaceSparseCosineSimilarity() {}
 
   virtual std::string StrDesc() const {
-    return "CosineSimilarity";
+    return SPACE_SPARSE_COSINE_SIMILARITY;
   }
 
  protected:
@@ -85,7 +84,7 @@ class SpaceSparseCosineSimilarity : public SpaceSparseVectorSimpleStorage<dist_t
     dist_t operator()(const dist_t* x, const dist_t* y, size_t length) const {
       dist_t val = CosineSimilarity(x, y, length);
       // This shouldn't normally happen, but let's keep this check
-      if (std::isnan(val)) throw runtime_error("SpaceCosineSimilarityDist Bug: NAN dist!!!!");
+      if (my_isnan(val)) throw runtime_error("SpaceCosineSimilarityDist Bug: NAN dist!!!!");
       return val;
     }
   };
@@ -100,7 +99,7 @@ public:
   virtual ~SpaceSparseNegativeScalarProduct() {}
 
   virtual std::string StrDesc() const {
-    return "NegativeScalarProduct";
+    return SPACE_SPARSE_NEGATIVE_SCALAR;
   }
 
 protected:
@@ -125,7 +124,7 @@ public:
   virtual ~SpaceSparseQueryNormNegativeScalarProduct() {}
 
   virtual std::string StrDesc() const {
-    return "QueryNormNegativeScalarProduct";
+    return SPACE_SPARSE_QUERY_NORM_NEGATIVE_SCALAR;
   }
 
 protected:
@@ -138,7 +137,7 @@ private:
     dist_t operator()(const dist_t* x, const dist_t* y, size_t length) const {
       // This shouldn't normally happen, but let's keep this check
       dist_t val = QueryNormScalarProduct(x, y, length);
-      if (std::isnan(val)) throw runtime_error("SpaceNegativeQueryNormScalarDist Bug: NAN dist!!!!");
+      if (my_isnan(val)) throw runtime_error("SpaceNegativeQueryNormScalarDist Bug: NAN dist!!!!");
       return -val;
     }
   };

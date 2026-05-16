@@ -1,33 +1,27 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
 #include "distcomp.h"
-#include "simdutils.h"
-#include "string.h"
 #include "logging.h"
 #include "utils.h"
 #include "pow.h"
+#include "portable_intrinsics.h"
 
 #include <cstdlib>
 #include <limits>
 #include <algorithm>
 #include <cmath>
-
-#ifdef PORTABLE_SSE2
-#include <immintrin.h>
-#endif
 
 namespace similarity {
 
@@ -50,7 +44,6 @@ T LInfNormStandard(const T *p1, const T *p2, size_t qty)
 }
 
 template float LInfNormStandard<float>(const float *p1, const float *p2, size_t qty);
-template double LInfNormStandard<double>(const double *p1, const double *p2, size_t qty);
 
 
 template <class T>
@@ -76,7 +69,6 @@ T LInfNorm(const T* pVect1, const T* pVect2, size_t qty) {
 }
 
 template float LInfNorm<float>(const float* pVect1, const float* pVect2, size_t qty);
-template double LInfNorm<double>(const double* pVect1, const double* pVect2, size_t qty);
 /* 
  * On new architectures unaligned loads are almost as fast as aligned ones. 
  * Ensuring that both pVect1 and pVect2 are similarly aligned could be hard.
@@ -146,50 +138,7 @@ float LInfNormSIMD(const float* pVect1, const float* pVect2, size_t qty) {
 #endif
 }
 
-template <> 
-double LInfNormSIMD(const double* pVect1, const double* pVect2, size_t qty) {
-#ifndef PORTABLE_SSE2
-#pragma message WARN("LInfNormSIMD<double>: SSE2 is not available, defaulting to pure C++ implementation!")
-    return LInfNormStandard(pVect1, pVect2, qty);
-#else
-    size_t qty8 = qty/8;
-
-    const double* pEnd1 = pVect1 + 8 * qty8;
-    const double* pEnd2 = pVect1 + qty;
-
-    __m128d  diff, v1, v2; 
-    __m128d  MAX = _mm_set1_pd(0); 
-
-
-    while (pVect1 < pEnd1) {
-        v1   = _mm_loadu_pd(pVect1); pVect1 += 2;
-        v2   = _mm_loadu_pd(pVect2); pVect2 += 2;
-        diff = _mm_sub_pd(v1, v2);
-        MAX  = _mm_max_pd(MAX, _mm_max_pd(_mm_sub_pd(_mm_setzero_pd(), diff), diff));
-
-        v1   = _mm_loadu_pd(pVect1); pVect1 += 2;
-        v2   = _mm_loadu_pd(pVect2); pVect2 += 2;
-        diff = _mm_sub_pd(v1, v2);
-        MAX  = _mm_max_pd(MAX, _mm_max_pd(_mm_sub_pd(_mm_setzero_pd(), diff), diff));
-
-    }
-
-    double PORTABLE_ALIGN16 TmpRes[2];
-
-    _mm_store_pd(TmpRes, MAX);
-    double res= max(TmpRes[0], TmpRes[1]);
-
-    while (pVect1 < pEnd2) {
-        double diff = fabs(*pVect1++ - *pVect2++);
-        res = max(res, (double)diff);
-    }
-
-    return res;
-#endif
-}
-
 template float LInfNormSIMD<float>(const float* pVect1, const float* pVect2, size_t qty);
-template double LInfNormSIMD<double>(const double* pVect1, const double* pVect2, size_t qty);
 
 /*
  * L1-norm.
@@ -208,7 +157,6 @@ T L1NormStandard(const T *p1, const T *p2, size_t qty)
 }
 
 template float L1NormStandard<float>(const float *p1, const float *p2, size_t qty);
-template double L1NormStandard<double>(const double *p1, const double *p2, size_t qty);
 
 
 template <class T>
@@ -234,7 +182,6 @@ T L1Norm(const T* pVect1, const T* pVect2, size_t qty) {
 }
 
 template float L1Norm<float>(const float* pVect1, const float* pVect2, size_t qty);
-template double L1Norm<double>(const double* pVect1, const double* pVect2, size_t qty);
 /* 
  * On new architectures unaligned loads are almost as fast as aligned ones. 
  * Ensuring that both pVect1 and pVect2 are similarly aligned could be hard.
@@ -303,51 +250,7 @@ float L1NormSIMD(const float* pVect1, const float* pVect2, size_t qty) {
 #endif
 }
 
-template <> 
-double L1NormSIMD(const double* pVect1, const double* pVect2, size_t qty) {
-#ifndef PORTABLE_SSE2
-#pragma message WARN("L1NormSIMD<double>: SSE2 is not available, defaulting to pure C++ implementation!")
-	return L1NormStandard(pVect1, pVect2, qty);
-#else
-	size_t qty8 = qty/8;
-
-	const double* pEnd1 = pVect1 + 8 * qty8;
-	const double* pEnd2 = pVect1 + qty;
-
-	__m128d  diff, v1, v2; 
-	__m128d  sum = _mm_set1_pd(0); 
-
-
-	while (pVect1 < pEnd1) {
-		v1   = _mm_loadu_pd(pVect1); pVect1 += 2;
-		v2   = _mm_loadu_pd(pVect2); pVect2 += 2;
-		diff = _mm_sub_pd(v1, v2);
-		sum  = _mm_add_pd(sum, _mm_max_pd(_mm_sub_pd(_mm_setzero_pd(), diff), diff));
-
-		v1   = _mm_loadu_pd(pVect1); pVect1 += 2;
-		v2   = _mm_loadu_pd(pVect2); pVect2 += 2;
-		diff = _mm_sub_pd(v1, v2);
-		sum  = _mm_add_pd(sum, _mm_max_pd(_mm_sub_pd(_mm_setzero_pd(), diff), diff));
-
-	}
-
-	double PORTABLE_ALIGN16 TmpRes[2];
-
-	_mm_store_pd(TmpRes, sum);
-	double res= TmpRes[0] + TmpRes[1];
-
-	while (pVect1 < pEnd2) {
-		// Leonid (@TODO) sometimes seg-faults in the unit test if float is replaced with double
-		float diff = *pVect1++ - *pVect2++;
-		res += fabs(diff);
-	}
-
-	return res;
-#endif
-}
-
 template float L1NormSIMD<float>(const float* pVect1, const float* pVect2, size_t qty);
-template double L1NormSIMD<double>(const double* pVect1, const double* pVect2, size_t qty);
 
 /*
  * L2-norm.
@@ -367,7 +270,6 @@ T L2NormStandard(const T *p1, const T *p2, size_t qty)
 }
 
 template  float L2NormStandard<float>(const float *p1, const float *p2, size_t qty);
-template  double L2NormStandard<double>(const double *p1, const double *p2, size_t qty);
 
 
 template <class T>
@@ -393,7 +295,6 @@ T L2Norm(const T* pVect1, const T* pVect2, size_t qty) {
 }
 
 template float  L2Norm<float>(const float* pVect1, const float* pVect2, size_t qty);
-template double L2Norm<double>(const double* pVect1, const double* pVect2, size_t qty);
 
 /* 
  * On new architectures unaligned loads are almost as fast as aligned ones. 
@@ -469,48 +370,7 @@ float L2NormSIMD(const float* pVect1, const float* pVect2, size_t qty) {
     return sqrt(res);
 }
 
-template <> 
-double L2NormSIMD(const double* pVect1, const double* pVect2, size_t qty) {
-#ifndef PORTABLE_SSE2
-#pragma message WARN("L2NormSIMD<double>: SSE2 is not available, defaulting to pure C++ implementation!")
-    return L2NormStandard(pVect1, pVect2, qty);
-#else
-    size_t qty8 = qty/8;
-
-    const double* pEnd1 = pVect1 + 8 * qty8;
-    const double* pEnd2 = pVect1 + qty;
-
-    __m128d  diff, v1, v2; 
-    __m128d  sum = _mm_set1_pd(0); 
-
-    while (pVect1 < pEnd1) {
-        v1   = _mm_loadu_pd(pVect1); pVect1 += 2;
-        v2   = _mm_loadu_pd(pVect2); pVect2 += 2;
-        diff = _mm_sub_pd(v1, v2);
-        sum  = _mm_add_pd(sum, _mm_mul_pd(diff, diff));
-
-        v1   = _mm_loadu_pd(pVect1); pVect1 += 2;
-        v2   = _mm_loadu_pd(pVect2); pVect2 += 2;
-        diff = _mm_sub_pd(v1, v2);
-        sum  = _mm_add_pd(sum, _mm_mul_pd(diff, diff));
-    }
-
-    double PORTABLE_ALIGN16 TmpRes[2];
-
-    _mm_store_pd(TmpRes, sum);
-    double res= TmpRes[0] + TmpRes[1];
-
-    while (pVect1 < pEnd2) {
-        double diff = *pVect1++ - *pVect2++; 
-        res += diff * diff;
-    }
-
-    return sqrt(res);
-#endif
-}
-
 template float  L2NormSIMD<float>(const float* pVect1, const float* pVect2, size_t qty);
-template double L2NormSIMD<double>(const double* pVect1, const double* pVect2, size_t qty);
 
 /*
  * Slower versions of LP-distance
@@ -533,7 +393,6 @@ T LPGenericDistance(const T* x, const T* y, const int length, const T p) {
 }
 
 template float LPGenericDistance<float>(const float* x, const float* y, const int length, const float p);
-template double LPGenericDistance<double>(const double* x, const double* y, const int length, const double p);
 
 /*
  * Exponentiation by square rooting and squaring:
@@ -588,6 +447,5 @@ T LPGenericDistanceOptim(const T* x, const T* y, const int length, const T p) {
 }
 
 template float LPGenericDistanceOptim<float>(const float* x, const float* y, const int length, const float p);
-template double LPGenericDistanceOptim<double>(const double* x, const double* y, const int length, const double p);
 
 }

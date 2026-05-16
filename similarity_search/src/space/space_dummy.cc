@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #include <cmath>
 #include <fstream>
 #include <string>
@@ -26,7 +24,7 @@ namespace similarity {
 
 template <typename dist_t>
 dist_t SpaceDummy<dist_t>::HiddenDistance(const Object* obj1, const Object* obj2) const {
-  LOG(LIB_INFO) << "Calculating the distance between objects: " << obj1->id() << " and " << obj2->id() << endl;
+  LOG(LIB_INFO) << "Calculating the distance between objects: " << obj1->id() << " and " << obj2->id();
   CHECK(obj1->datalength() > 0);
   CHECK(obj1->datalength() == obj2->datalength());
   /* 
@@ -83,7 +81,7 @@ bool SpaceDummy<dist_t>::ReadNextObjStr(DataFileInputState &inpStateBase, string
 template <typename dist_t>
 void SpaceDummy<dist_t>::WriteNextObj(const Object& obj, const string& externId, DataFileOutputState &outState) const {
   string s = CreateStrFromObj(&obj, externId);
-  outState.out_file_ << s << endl;
+  outState.out_file_ << s;
 }
 /** End of standard functions to read/write/create objects */ 
 
@@ -91,6 +89,5 @@ void SpaceDummy<dist_t>::WriteNextObj(const Object& obj, const string& externId,
 
 template class SpaceDummy<int>;
 template class SpaceDummy<float>;
-template class SpaceDummy<double>;
 
 }  // namespace similarity

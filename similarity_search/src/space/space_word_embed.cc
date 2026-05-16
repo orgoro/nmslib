@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #include <cmath>
 #include <fstream>
 #include <sstream>
@@ -56,11 +54,11 @@ bool WordEmbedSpace<dist_t>::ReadNextObjStr(DataFileInputState &inpStateBase, st
   if (!pInpState->inp_file_) return false;
   if (!getline(pInpState->inp_file_, strObj)) return false;
   pInpState->line_num_++;
-  ssize_t pos = -1;
+  size_t pos = NMSLIB_SIZE_T_MAX;
   for (size_t i = 0; i < strObj.size(); ++i) 
   if (isspace(strObj[i])) { pos = i ; break; }
 
-  if (-1 == pos) {
+  if (NMSLIB_SIZE_T_MAX == pos) {
     PREPARE_RUNTIME_ERR(err) << "No white space in line #" << pInpState->line_num_ << " line: '" << strObj << "'";
     THROW_RUNTIME_ERR(err);
   }
@@ -102,10 +100,6 @@ dist_t WordEmbedSpace<dist_t>::HiddenDistance(const Object* obj1, const Object* 
   THROW_RUNTIME_ERR(err);
 }
 
-/* 
- * Note that we don't instantiate vector spaces for types other than float & double
- */
 template class WordEmbedSpace<float>;
-template class WordEmbedSpace<double>;
 
 }  // namespace similarity

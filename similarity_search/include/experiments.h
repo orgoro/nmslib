@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #ifndef _EXPERIMENTS_H
 #define _EXPERIMENTS_H
 
@@ -43,6 +41,7 @@
 #include "eval_results.h"
 #include "meta_analysis.h"
 #include "query_creator.h"
+#include "thread_pool.h"
 
 namespace similarity {
 
@@ -65,6 +64,7 @@ public:
                      unsigned                             ThreadTestQty,
                      size_t                               TestSetId,
                      const GoldStandardManager<dist_t>&   managerGS,
+                     bool                                 recallOnly,
                      vector<vector<MetaAnalysis*>>&       ExpResRange,
                      vector<vector<MetaAnalysis*>>&       ExpResKNN,
                      const ExperimentConfig<dist_t>&      config,
@@ -82,6 +82,7 @@ public:
         Execute<RangeQuery<dist_t>, RangeCreator<dist_t>>(LogInfo,
                                                   ThreadTestQty, TestSetId,
                                                   managerGS.GetRangeGS(i),
+                                                  recallOnly,
                                                   ExpResRange[i], config, cr, 
                                                   Method, QueryTimeParams);
       }
@@ -94,6 +95,7 @@ public:
         Execute<KNNQuery<dist_t>, KNNCreator<dist_t>>(LogInfo,
                                               ThreadTestQty, TestSetId,
                                               managerGS.GetKNNGS(i),
+                                              recallOnly,
                                               ExpResKNN[i], config, cr, 
                                               Method, QueryTimeParams);
       }
@@ -101,106 +103,11 @@ public:
     if (LogInfo) LOG(LIB_INFO) << "experiment done at " << LibGetCurrentTime();
   }
 
-  template <typename QueryType, typename QueryCreatorType>
-  struct  BenchmarkThreadParams {
-    BenchmarkThreadParams(
-              mutex&                          UpdateStat,
-              unsigned                        ThreadQty,
-              unsigned                        QueryPart,
-              size_t                          TestSetId, 
-              std::vector<MetaAnalysis*>&     ExpRes,
-              const ExperimentConfig<dist_t>& config,
-              const QueryCreatorType&         QueryCreator,
-              const Index<dist_t>&            Method,
-              unsigned                        MethNum,
-              vector<uint64_t>&               SearchTime,
-              vector<double>&                 AvgNumDistComp,
-              vector<unsigned>&               max_result_size,
-              vector<double>&                 avg_result_size,
-              vector<uint64_t>&               DistCompQty) :
-    UpdateStat_(UpdateStat),
-    ThreadQty_(ThreadQty),
-    QueryPart_(QueryPart),
-    TestSetId_(TestSetId),
-    ExpRes_(ExpRes),
-    config_(config),
-    QueryCreator_(QueryCreator),
-    Method_(Method),
-    MethNum_(MethNum),
-    SearchTime_(SearchTime),
-
-    AvgNumDistComp_(AvgNumDistComp),
-    max_result_size_(max_result_size),
-    avg_result_size_(avg_result_size),
-    DistCompQty_(DistCompQty)
-    {}
-
-    mutex&                          UpdateStat_;
-    unsigned                        ThreadQty_;
-    unsigned                        QueryPart_;
-    size_t                          TestSetId_;
-    std::vector<MetaAnalysis*>&     ExpRes_;
-    const ExperimentConfig<dist_t>& config_;
-    const QueryCreatorType&         QueryCreator_;
-    const Index<dist_t>&                  Method_;
-    unsigned                        MethNum_;
-    vector<uint64_t>&               SearchTime_;
-
-    vector<double>&                 AvgNumDistComp_;
-    vector<unsigned>&               max_result_size_;
-    vector<double>&                 avg_result_size_;
-    vector<uint64_t>&               DistCompQty_;
-
-    vector<size_t>                  queryIds;
-    vector<unique_ptr<QueryType>>   queries; // queries with results
-  };
-
-  template <typename QueryType, typename QueryCreatorType> 
-  struct BenchmarkThread {
-    void operator ()(BenchmarkThreadParams<QueryType, QueryCreatorType>& prm) {
-      size_t numquery = prm.config_.GetQueryObjects().size();
-
-      WallClockTimer wtm;
-
-      wtm.reset();
-
-      unsigned MethNum = prm.MethNum_;
-      unsigned QueryPart = prm.QueryPart_;
-      unsigned ThreadQty = prm.ThreadQty_;
-
-      for (size_t q = 0; q < numquery; ++q) {
-        if ((q % ThreadQty) == QueryPart) {
-          unique_ptr<QueryType> query(prm.QueryCreator_(prm.config_.GetSpace(), 
-                                      prm.config_.GetQueryObjects()[q]));
-          uint64_t  t1 = wtm.split();
-          prm.Method_.Search(query.get());
-          uint64_t  t2 = wtm.split();
-
-          {
-            lock_guard<mutex> g(prm.UpdateStat_);
-
-            prm.ExpRes_[MethNum]->AddDistComp(prm.TestSetId_, query->DistanceComputations());
-            prm.ExpRes_[MethNum]->AddQueryTime(prm.TestSetId_, (1.0*t2 - t1)/1e3);
-
-
-            prm.DistCompQty_[MethNum] += query->DistanceComputations();
-            prm.avg_result_size_[MethNum] += query->ResultSize();
-
-            if (query->ResultSize() > prm.max_result_size_[MethNum]) {
-              prm.max_result_size_[MethNum] = query->ResultSize();
-            }
-
-            prm.queryIds.push_back(q);
-            prm.queries.push_back(std::move(query));
-          }
-        }
-      }
-    }
-  };
 
   template <typename QueryType, typename QueryCreatorType>
   static void Execute(bool LogInfo, unsigned ThreadTestQty, size_t TestSetId,
                      const vector<unique_ptr<GoldStandard<dist_t>>> &goldStand,
+                     bool                                           recallOnly,
                      std::vector<MetaAnalysis*>&                    ExpRes,
                      const ExperimentConfig<dist_t>&                config,
                      const QueryCreatorType&                        QueryCreator,
@@ -255,41 +162,51 @@ public:
 
       if (!ThreadTestQty) ThreadTestQty = 1;
 
-      vector<BenchmarkThreadParams<QueryType, QueryCreatorType>*>       ThreadParams(ThreadTestQty);
-      vector<thread>                                                    Threads(ThreadTestQty);
-      AutoVectDel<BenchmarkThreadParams<QueryType, QueryCreatorType>>   DelThreadParams(ThreadParams);
+      vector<vector<size_t>>                  QueryIds;
+      vector<vector<unique_ptr<QueryType>>>   Queries; // queries with results
+
+      QueryIds.resize(ThreadTestQty);
+      Queries.resize(ThreadTestQty);
+
+      /*
+       * Because each thread uses its own parameter set, we must use
+       * exactly ThreadTestQty sets.
+       */
+      ParallelFor(0, ThreadTestQty, ThreadTestQty, [&](unsigned QueryPart, unsigned ThreadId) {
+        size_t numquery = config.GetQueryObjects().size();
+
+        WallClockTimer wtm;
+
+        wtm.reset();
+
+        for (size_t q = 0; q < numquery; ++q) {
+          if ((q % ThreadTestQty) == QueryPart) {
+            unique_ptr<QueryType> query(QueryCreator(config.GetSpace(), 
+                                        config.GetQueryObjects()[q]));
+            uint64_t  t1 = wtm.split();
+            Method.Search(query.get());
+            uint64_t  t2 = wtm.split();
+
+            {
+              lock_guard<mutex> g(UpdateStat);
+
+              ExpRes[MethNum]->AddDistComp(TestSetId, query->DistanceComputations());
+              ExpRes[MethNum]->AddQueryTime(TestSetId, (1.0*t2 - t1)/1e3);
 
 
-      for (unsigned QueryPart = 0; QueryPart < ThreadTestQty; ++QueryPart) {
-        ThreadParams[QueryPart] =  new BenchmarkThreadParams<QueryType, QueryCreatorType>(
-                                              UpdateStat,
-                                              ThreadTestQty,
-                                              QueryPart,
-                                              TestSetId, 
-                                              ExpRes,
-                                              config,
-                                              QueryCreator,
-                                              Method,
-                                              MethNum,
-                                              SearchTime,
-                                              AvgNumDistComp,
-                                              max_result_size,
-                                              avg_result_size,
-                                              DistCompQty);
-      }
+              DistCompQty[MethNum] += query->DistanceComputations();
+              avg_result_size[MethNum] += query->ResultSize();
 
-      if (ThreadTestQty> 1) {
-        for (unsigned QueryPart = 0; QueryPart < ThreadTestQty; ++QueryPart) {
-          Threads[QueryPart] = std::thread(BenchmarkThread<QueryType, QueryCreatorType>(), 
-                                     ref(*ThreadParams[QueryPart]));
+              if (query->ResultSize() > max_result_size[MethNum]) {
+                max_result_size[MethNum] = query->ResultSize();
+              }
+
+              QueryIds[QueryPart].push_back(q);
+              Queries[QueryPart].push_back(std::move(query));
+            }
+          }
         }
-        for (unsigned QueryPart = 0; QueryPart < ThreadTestQty; ++QueryPart) {
-          Threads[QueryPart].join();
-        }
-      } else {
-        CHECK(ThreadTestQty == 1);
-        BenchmarkThread<QueryType, QueryCreatorType>()(*ThreadParams[0]);
-      }
+      });
 
       wtm.split();
 
@@ -305,17 +222,15 @@ public:
       if (LogInfo) LOG(LIB_INFO) << ">>>> Computing effectiveness metrics for " << Method.StrDesc();
 
       for (unsigned QueryPart = 0; QueryPart < ThreadTestQty; ++QueryPart) {
-        const BenchmarkThreadParams<QueryType, QueryCreatorType>*   params = ThreadParams[QueryPart];
-       
-        for (size_t qi = 0; qi < params->queries.size(); ++qi) {
-          size_t            q = params->queryIds[qi] ;
-          const QueryType*  pQuery = params->queries[qi].get();
+        for (size_t qi = 0; qi < Queries[QueryPart].size(); ++qi) {
+          size_t            q = QueryIds[QueryPart][qi] ;
+          const QueryType*  pQuery = Queries[QueryPart][qi].get();
 
           unique_ptr<QueryType> queryGS(QueryCreator(config.GetSpace(), config.GetQueryObjects()[q]));
 
           const GoldStandard<dist_t>&  QueryGS = *goldStand[q];
 
-          EvalResults<dist_t>     Eval(config.GetSpace(), pQuery, QueryGS);
+          EvalResults<dist_t>     Eval(config.GetSpace(), pQuery, QueryGS, recallOnly);
 
           NumCloser[MethNum]    += Eval.GetNumCloser();
           RecallAt1[MethNum]    += Eval.GetRecallAt1();

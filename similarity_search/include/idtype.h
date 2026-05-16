@@ -1,27 +1,24 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
- *_
+ *
  */
-
 #ifndef ID_TYPE_H
 #define ID_TYPE_H
 
 #include <cstdint>
+#include <limits>
 
 namespace similarity {
-
-using std::numeric_limits;
 
 /* 
  * We are not gonna have billions of records or labels in the foreseeable future
@@ -34,12 +31,12 @@ using std::numeric_limits;
  */
 typedef int32_t  IdType;
 typedef uint32_t IdTypeUnsign;
-const IdTypeUnsign MAX_DATASET_QTY = numeric_limits<IdType>::max();
+const IdTypeUnsign MAX_DATASET_QTY = std::numeric_limits<IdType>::max();
 
 typedef int32_t LabelType;
 
 #define LABEL_PREFIX "label:"
-#define EMPTY_LABEL  numeric_limits<LabelType>::min()
+#define EMPTY_LABEL  std::numeric_limits<LabelType>::min()
 
 const size_t ID_SIZE         = sizeof(IdType);
 const size_t LABEL_SIZE      = sizeof(LabelType);

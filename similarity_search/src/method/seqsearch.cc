@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #include <thread>
 
 #include "space.h"
@@ -55,7 +53,7 @@ struct SearchThreadSeqSearch {
 
 template <typename dist_t>
 SeqSearch<dist_t>::SeqSearch(Space<dist_t>& space, const ObjectVector& origData) :
-                      space_(space), origData_(origData), cacheOptimizedBucket_(NULL), pData_(NULL) {
+                      Index<dist_t>(origData), space_(space), cacheOptimizedBucket_(NULL), pData_(NULL) {
 }
 
 template <typename dist_t>
@@ -96,7 +94,7 @@ void SeqSearch<dist_t>::CreateIndex(const AnyParams& IndexParams) {
   SetQueryTimeParams(getEmptyParams());
 
   if (bCopyMem) {
-    CreateCacheOptimizedBucket(origData_, cacheOptimizedBucket_, pData_);
+    CreateCacheOptimizedBucket(this->data_, cacheOptimizedBucket_, pData_);
   }
 }
 
@@ -179,7 +177,6 @@ void SeqSearch<dist_t>::Search(KNNQuery<dist_t>* query, IdType) const {
 }
 
 template class SeqSearch<float>;
-template class SeqSearch<double>;
 template class SeqSearch<int>;
 
 }

@@ -1,24 +1,23 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #ifndef FACTORY_SPACE_SPARSE_SCALAR_H
 #define FACTORY_SPACE_SPARSE_SCALAR_H
 
 #include <space/space_sparse_scalar.h>
 #include <space/space_sparse_scalar_fast.h>
+#include <space/space_sparse_scalar_bin_fast.h>
 
 namespace similarity {
 
@@ -60,6 +59,10 @@ Space<float>* CreateSparseCosineSimilarityFast(const AnyParams& /* ignoring para
   return new SpaceSparseCosineSimilarityFast();
 }
 
+Space<float>* CreateSparseCosineSimilarityBinFast(const AnyParams& /* ignoring params */) {
+  // Cosine Similarity
+  return new SpaceSparseCosineSimilarityBinFast();
+}
 
 Space<float>* CreateSparseNegativeScalarProductFast(const AnyParams& /* ignoring params */) {
   // Cosine Similarity
@@ -69,6 +72,11 @@ Space<float>* CreateSparseNegativeScalarProductFast(const AnyParams& /* ignoring
 Space<float>* CreateSparseQueryNormNegativeScalarProductFast(const AnyParams& /* ignoring params */) {
   // Cosine Similarity
   return new SpaceSparseQueryNormNegativeScalarProductFast();
+}
+
+Space<float>* CreateSparseNegativeScalarProductBinFast(const AnyParams& /* ignoring params */) {
+  // Cosine Similarity
+  return new SpaceSparseNegativeScalarProductBinFast();
 }
 
 Space<float>* CreateSparseAngularDistanceFast(const AnyParams& /* ignoring params */) {

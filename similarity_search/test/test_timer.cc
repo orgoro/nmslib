@@ -1,19 +1,18 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) && !defined(__APPLE__)
 
 #include <sys/time.h>
 
@@ -22,6 +21,9 @@
 #include "bunit.h"
 
 namespace similarity {
+
+// We expect both timers to differ in at most 1 ms
+const unsigned TIMER_ERR_TOL = 1000;
 
 /*
  * These test is intended to run only on Unix-like systems.
@@ -73,16 +75,14 @@ TEST(TestTimer) {
   z.split();
 
   LOG(LIB_INFO) << "Timer: " << z.elapsed() << " : " << oldz.elapsed();
-  // We expect both timers to differ in at most 0.1 ms
-  EXPECT_EQ(std::abs(static_cast<int64_t>(z.elapsed()) - static_cast<int64_t>(oldz.elapsed())) < 100, true);
+  EXPECT_EQ(std::abs(static_cast<int64_t>(z.elapsed()) - static_cast<int64_t>(oldz.elapsed())) < TIMER_ERR_TOL, true);
 
   BurnCPU();
   oldz.split();
   z.split();
 
   LOG(LIB_INFO) << "Timer: " << z.elapsed() << " : " << oldz.elapsed();
-  // We expect both timers to differ in at most 0.1 ms
-  EXPECT_EQ(std::abs(static_cast<int64_t>(z.elapsed()) - static_cast<int64_t>(oldz.elapsed())) < 100, true);
+  EXPECT_EQ(std::abs(static_cast<int64_t>(z.elapsed()) - static_cast<int64_t>(oldz.elapsed())) < TIMER_ERR_TOL, true);
 
   z.reset();
   oldz.reset();
@@ -92,8 +92,7 @@ TEST(TestTimer) {
   z.split();
 
   LOG(LIB_INFO) << "Timer: " << z.elapsed() << " : " << oldz.elapsed();
-  // We expect both timers to differ in at most 0.1 ms
-  EXPECT_EQ(std::abs(static_cast<int64_t>(z.elapsed()) - static_cast<int64_t>(oldz.elapsed())) < 100, true);
+  EXPECT_EQ(std::abs(static_cast<int64_t>(z.elapsed()) - static_cast<int64_t>(oldz.elapsed())) < TIMER_ERR_TOL, true);
 }
 
 }  // namespace similarity

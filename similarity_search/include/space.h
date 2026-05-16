@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2015
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #ifndef SPACE_H
 #define SPACE_H
 
@@ -37,7 +35,6 @@
 
 #define DIST_TYPE_INT      "int"
 #define DIST_TYPE_FLOAT    "float"
-#define DIST_TYPE_DOUBLE   "double"
 
 namespace similarity {
 
@@ -57,7 +54,6 @@ template <typename dist_t>
 const char* DistTypeName();
 
 template <> inline const char* DistTypeName<float>() { return "FLOAT"; }
-template <> inline const char* DistTypeName<double>() { return "DOUBLE"; }
 template <> inline const char* DistTypeName<int>() { return "INT"; }
 template <typename dist_t> inline const char* DistTypeName() { return typeid(dist_t).name(); }
 
@@ -110,6 +106,28 @@ struct DataFileOutputState {
 };
 
 template <typename dist_t>
+class PivotIndex {
+public:
+  virtual ~PivotIndex();
+  virtual void ComputePivotDistancesIndexTime(const Object* pObj, vector<dist_t>& vResDist) const = 0;
+  virtual void ComputePivotDistancesQueryTime(const Query<dist_t>* pQuery, vector<dist_t>& vResDist) const = 0;
+};
+
+template <typename dist_t> class Space;
+template <typename dist_t> class Query;
+
+template <typename dist_t>
+class DummyPivotIndex : public PivotIndex<dist_t> {
+  const Space<dist_t>&  space_;
+  ObjectVector          pivots_;
+public:
+  virtual ~DummyPivotIndex();
+  DummyPivotIndex(const Space<dist_t>& space, const ObjectVector pivots) : space_(space), pivots_(pivots) {}
+  virtual void ComputePivotDistancesIndexTime(const Object* pObj, vector<dist_t>& vResDist) const override;
+  virtual void ComputePivotDistancesQueryTime(const Query<dist_t>* pQuery, vector<dist_t>& vResDist) const override;
+};
+
+template <typename dist_t>
 class Space {
  public:
   explicit Space() {}
@@ -128,6 +146,19 @@ class Space {
   }
 
   virtual string StrDesc() const = 0;
+
+  /*
+   * This virtual function can be overridden to create an index that
+   * efficiently computes distance to all pivots. Contract: this
+   * function may assume that objects (instances of Object) in the 
+   * array passed as this function argument exist at a later time,
+   * i.e., when we call functions ComputePivotDistancesIndexTime and
+   * ComputePivotDistancesQueryTime.
+   */
+  virtual PivotIndex<dist_t>* CreatePivotIndex(const ObjectVector& pivots,
+                                               size_t hashTrickDim = 0) const {
+    return new DummyPivotIndex<dist_t>(*this, pivots);
+  }
 
   /** Standard functions to read/write/create objects */ 
   /*
@@ -181,8 +212,23 @@ class Space {
                    const IdTypeUnsign MaxNumObjects = MAX_DATASET_QTY) const;
   void WriteDataset(const ObjectVector& dataset,
                    const vector<string>& vExternIds,
-                   const string& inputFile,
+                   const string& outputFile,
                    const IdTypeUnsign MaxNumObjects = MAX_DATASET_QTY) const;
+
+  /*
+   * if the space stores some useful information in the input state,
+   * it needs to override ReadObjectVectorFromBinData, and WriteObjectVectorBinData.
+   * PS: Here an assumption is that data is empty
+   */
+  virtual unique_ptr<DataFileInputState> ReadObjectVectorFromBinData(ObjectVector& dataset,
+                                                                     vector<string>& vExternIds,
+                                                                     const std::string& inputFile,
+                                                                     const IdTypeUnsign maxQty=MAX_DATASET_QTY) const;
+
+  virtual void WriteObjectVectorBinData(const ObjectVector& dataset,
+                                        const vector<string>& vExternIds,
+                                        const std::string& outputFile,
+                                        const IdTypeUnsign MaxNumObjects = MAX_DATASET_QTY) const;
 
   /*
    * For some real-valued or integer-valued *DENSE* vector spaces this function
@@ -190,7 +236,7 @@ class Space {
    * 0.
    *
    * TODO: @leo This seems to be related to issue #7
-   * https://github.com/searchivarius/NonMetricSpaceLib/issues/7
+   * https://github.com/nmslib/nmslib/issues/7
    *
    * With a proper hierarchy of Object classes, getDimension() would
    * be a function of an object, not of a space. At some point Object

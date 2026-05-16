@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #include <cmath>
 #include <fstream>
 #include <sstream>
@@ -22,6 +20,8 @@
 #include <memory>
 #include <iomanip>
 #include <limits>
+#include <cstdio>
+#include <cstdint>
 
 #include "object.h"
 #include "utils.h"
@@ -29,6 +29,7 @@
 #include "distcomp.h"
 #include "experimentconf.h"
 #include "space/space_vector.h"
+#include "read_data.h"
 
 namespace similarity {
 
@@ -126,21 +127,14 @@ void VectorSpace<dist_t>::ReadVec(string line, LabelType& label, vector<dist_t>&
 
   label = Object::extractLabel(line);
 
-  ReplaceSomePunct(line); 
-  stringstream str(line);
-
-  str.exceptions(ios::badbit);
-
-  dist_t val;
-
-
-  try {
-    while (str >> val) {
-      v.push_back(val);
-    }
-  } catch (const exception &e) {
-    LOG(LIB_ERROR) << "Exception: " << e.what();
-    LOG(LIB_FATAL) << "Failed to parse the line: '" << line << "'";
+#if 0
+  if (!ReadVecDataViaStream(line, v)) {
+#else
+  if (!ReadVecDataEfficiently(line, v)) {
+#endif
+    PREPARE_RUNTIME_ERR(err) << "Failed to parse the line: '" << line << "'";
+    LOG(LIB_ERROR) << err.stream().str();
+    THROW_RUNTIME_ERR(err);
   }
 }
 
@@ -149,12 +143,7 @@ Object* VectorSpace<dist_t>::CreateObjFromVect(IdType id, LabelType label, const
   return new Object(id, label, InpVect.size() * sizeof(dist_t), &InpVect[0]);
 };
 
-/* 
- * Note that we don't instantiate vector spaces for types other than float & double
- * The only exception is the VectorSpace<PivotIdType>
- */
 template class VectorSpace<PivotIdType>;
 template class VectorSpace<float>;
-template class VectorSpace<double>;
 
 }  // namespace similarity

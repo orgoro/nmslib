@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #ifndef POW_HPP
 #define POW_HPP
 
@@ -26,6 +24,9 @@
  */
 
 #include <cmath>
+#include <limits>
+
+#include "logging.h"
 
 namespace similarity {
 
@@ -150,9 +151,6 @@ inline T EfficientPow(T Base, unsigned Exp) {
 }
 
 
-
-}
-
 template <class T>
 inline T EfficientFractPowUtil(T Base, uint64_t Exp, uint64_t MaxK) {
     if (Exp == 0)    return 1;     // pow == 0 
@@ -185,5 +183,62 @@ inline T EfficientFractPow(T Base, T FractExp, unsigned NumDig) {
     return EfficientFractPowUtil(Base, Exp, MaxK);
 }
 
+/**
+  * A helper object that does some preprocessing for subsequent
+  * efficient computation of both integer and fractional
+  * powers for exponents x, where x * 2^maxDig is an integer.
+  * In other words, this can be done for exponents that have
+  * zeros beyond maxDig binary digits after the binary point.
+  * When the exponent does not satisfy this property,
+  * we simply default to using the standard std::pow function.
+  */
+template <class T>
+class PowerProxyObject {
+public:
+  /**
+    * Constructor.
+    *
+    * @param  p       is an exponent
+    * @param  maxDig  a maximum number of binary digits to consider (should be <= 31).
+    */
+  PowerProxyObject(const T p, const unsigned maxDig = 18) {
+    pOrig_ = p;
+    isNeg_ = p < 0;
+    p_ = (isNeg_) ? -p : p;
+    maxK_ = 1u << maxDig;
+    unsigned pfm = static_cast<unsigned>(std::floor(maxK_ * p_));
+
+    isOptim_   = (fabs(maxK_*p_ - pfm) <= 2 * std::numeric_limits<T>::min());
+    intPow_    = pfm >> maxDig;
+    fractPow_  = pfm - (intPow_ << maxDig);
+
+  }
+  
+  /**
+    * Compute pow(base, p_) possibly efficiently. We expect base to be 
+    * non-negative!
+    */
+  T inline pow(T base) {
+    if (isOptim_) {
+      if (isNeg_) base = 1/base; // Negative power
+      T mult1  = intPow_ ?    EfficientPow(base, intPow_) : 1;
+      T mult2  = fractPow_ ?  EfficientFractPowUtil(base, fractPow_, maxK_) : 1;
+      return mult1 * mult2;
+    } else {
+      return std::pow(base, pOrig_);
+    }
+  }
+private:
+  bool     isNeg_;
+  T        pOrig_;
+  T        p_;
+  unsigned maxK_;
+  bool     isOptim_;
+  unsigned intPow_;
+  unsigned fractPow_;
+};
+
+
+}
 
 #endif

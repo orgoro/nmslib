@@ -1,4 +1,17 @@
-
+/**
+ * Non-metric Space Library
+ *
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
+ *
+ * For the complete list of contributors and further details see:
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
+ *
+ * This code is released under the
+ * Apache License Version 2.0 http://www.apache.org/licenses/.
+ *
+ */
 #ifndef NONMETRICSPACELIB_PIVOT_NEIGHB_COMMON_H_H
 #define NONMETRICSPACELIB_PIVOT_NEIGHB_COMMON_H_H
 
@@ -12,6 +25,8 @@ using std::vector;
 #define PERM_PROC_FAST_SCAN       "scan"
 #define PERM_PROC_MAP             "map"
 #define PERM_PROC_MERGE           "merge"
+#define PERM_PROC_PRIOR_QUEUE     "pqueue"
+#define PERM_PROC_WAND            "wand"
 
 struct IdCount {
   size_t id;

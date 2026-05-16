@@ -1,27 +1,28 @@
-#ifndef  SORT_ARR_BI_H
-#define  SORT_ARR_BI_H
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib
+ * https://github.com/nmslib/nmslib
  *
- * Copyright (c) 2015
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
+#ifndef  SORT_ARR_BI_H
+#define  SORT_ARR_BI_H
 
 #include <cstdint>
 #include <cstdlib>
 #include <stdexcept>
 #include <vector>
 #include <algorithm>
+
+#include "portable_simd.h"
+#include "portable_prefetch.h"
 
 /*
  * This is not a fully functional heap and this is done on purpose.
@@ -74,7 +75,8 @@ class SortArrBI {
   }
 
   void sort() {
-    _mm_prefetch(&v_[0], _MM_HINT_T0);
+    if (!v_.empty())
+      PREFETCH(&v_[0], _MM_HINT_T0);
     std::sort(v_.begin(), v_.begin() + num_elems_);
   }
 
@@ -86,7 +88,7 @@ class SortArrBI {
   // it also assumes a non-empty array
   size_t push_or_replace_non_empty(const KeyType& key, const DataType& data) {
     // num_elems_ > 0
-    unsigned curr = num_elems_ - 1;
+    size_t curr = num_elems_ - 1;
     if (v_[curr].key <= key) {
       if (num_elems_ < v_.size()) {
         v_[num_elems_].used = false;
@@ -99,15 +101,17 @@ class SortArrBI {
     }
 
     while (curr > 0) {
-      unsigned j = curr - 1;
+      size_t j = curr - 1;
       if (v_[j].key <= key) break;
       curr = j;
     }
 
     if (num_elems_ < v_.size()) num_elems_++;
     // curr + 1 <= num_elems_
-    _mm_prefetch((char *)&v_[curr], _MM_HINT_T0);
-    memmove((char *)&v_[curr+1], &v_[curr], (num_elems_ - (1 + curr)) * sizeof(v_[0]));
+    PREFETCH((char *)&v_[curr], _MM_HINT_T0);
+
+    if (num_elems_ - (1 + curr) > 0)
+      memmove((char *)&v_[curr+1], &v_[curr], (num_elems_ - (1 + curr)) * sizeof(v_[0]));
     
     v_[curr].used = false;
     v_[curr].key  = key;
@@ -150,9 +154,11 @@ class SortArrBI {
     return ret;
   }
 
+  // Checking for duplicate IDs isn't the responsibility of this function
+  // it also assumes a non-empty array
   size_t push_or_replace_non_empty_exp(const KeyType& key, const DataType& data) {
     // num_elems_ > 0
-    unsigned curr = num_elems_ - 1;
+    size_t curr = num_elems_ - 1;
     if (v_[curr].key <= key) {
       if (num_elems_ < v_.size()) {
         v_[num_elems_].used = false;
@@ -163,9 +169,9 @@ class SortArrBI {
         return num_elems_;
       }
     }
-    unsigned prev = curr;
+    size_t prev = curr;
 
-    unsigned d=1;
+    size_t d=1;
     // always curr >= d
     while (curr > 0 && v_[curr].key > key) {
       prev = curr;
@@ -174,7 +180,7 @@ class SortArrBI {
       if (d > curr) d = curr;
     }
 
-    _mm_prefetch((char*)&v_[curr], _MM_HINT_T0);
+    PREFETCH((char*)&v_[curr], _MM_HINT_T0);
     if (curr < prev) {
       curr = std::lower_bound(&v_[curr], &v_[prev], Item(key)) - &v_[0];
     }
@@ -182,7 +188,7 @@ class SortArrBI {
     if (num_elems_ < v_.size()) num_elems_++;
     // curr + 1 <= num_elems_
 
-    if(num_elems_ - (1 + curr) > 0)
+    if (num_elems_ - (1 + curr) > 0)
 		   memmove(&v_[curr+1], &v_[curr], (num_elems_ - (1 + curr)) * sizeof(v_[0]));
 
 

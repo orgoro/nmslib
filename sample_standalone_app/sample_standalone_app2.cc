@@ -1,13 +1,12 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
@@ -49,6 +48,7 @@ float compAvgDist(KNNQuery<float>* qobj) {
     ++qty;
     res->Pop();
   }
+  delete res;
   return sum/qty;
 }
 
@@ -92,8 +92,9 @@ int main(int argc, char* argv[]) {
   const char *dataFile  = argv[2];
   const char *queryFile = argv[3];
 
+  int seed = 0;
   
-  initLibrary(LIB_LOGSTDERR, NULL);
+  initLibrary(seed, LIB_LOGSTDERR, NULL);
 
   // Create an instance of our custom space that uses L2-distance
   AnyParams empty;
@@ -113,14 +114,14 @@ int main(int argc, char* argv[]) {
   AnyParams IndexParams(
             {
             "NN=17",
-            "initIndexAttempts=3",
+            "efConstruction=50",
             "indexThreadQty=4", /* 4 indexing threads */
             }
             );
 
   AnyParams QueryTimeParams(
             {
-            "initSearchAttempts=1",
+            "efSearch=50",
             }
             );
 

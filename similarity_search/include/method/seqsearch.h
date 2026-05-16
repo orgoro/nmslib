@@ -1,13 +1,12 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
@@ -43,9 +42,10 @@ class SeqSearch : public Index<dist_t> {
   void Search(KNNQuery<dist_t>* query, IdType) const override;
 
   void SetQueryTimeParams(const AnyParams& params) override {}
+
+  size_t GetSize() const override { return getData().size(); }
  private:
   Space<dist_t>&          space_;
-  const ObjectVector&     origData_;
   char*                   cacheOptimizedBucket_;
 
   ObjectVector*           pData_;
@@ -53,7 +53,7 @@ class SeqSearch : public Index<dist_t> {
   IdTypeUnsign            threadQty_;
   vector<ObjectVector>    vvThreadData;
 
-  const ObjectVector& getData() const { return pData_ != NULL ? *pData_ : origData_; }
+  const ObjectVector& getData() const { return pData_ != NULL ? *pData_ : this->data_; }
   // disable copy and assign
   DISABLE_COPY_AND_ASSIGN(SeqSearch);
 };

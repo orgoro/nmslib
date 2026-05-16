@@ -1,34 +1,27 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #include <cmath>
 
 #include "distcomp.h"
-#include "simdutils.h"
+#include "portable_intrinsics.h"
 #include "utils.h"
 
 namespace similarity {
 
 using namespace std;
 
-#ifdef PORTABLE_SSE4
-#include <immintrin.h>
-#include <smmintrin.h>
-#include <tmmintrin.h>
-#endif
 
 int SpearmanFootrule(const PivotIdType* x, const PivotIdType* y, size_t qty) {
   int res = 0;

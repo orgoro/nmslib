@@ -1,13 +1,12 @@
 /**
  * Non-metric Space Library
- *#
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ *
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
@@ -50,6 +49,8 @@ class KNNQuery;
 template <typename dist_t>
 class Index {
 public:
+  Index(const ObjectVector& data) : data_(data) {}
+
   // Create an index using given parameters
   virtual void CreateIndex(const AnyParams& indexParams) = 0;
   // SaveIndex is not necessarily implemented
@@ -82,6 +83,24 @@ public:
    * adjust the memory consumption of the index.
    */
   virtual bool DuplicateData() const { return false; }
+
+  virtual void AddBatch(const ObjectVector& batchData, bool printProgress, bool checkIDs = false/* this is a debug flag only, turning it on may affect performance */) {
+    throw runtime_error("AddBatch is not implemented!");
+  }
+
+  virtual void DeleteBatch(const ObjectVector& batchData, int delStrategy /* this flag is method-specific */,
+                           bool checkIDs = false/* this is a debug flag only, turning it on may affect performance */) {
+    throw runtime_error("DeleteBatch is not implemented!");
+  }
+
+  virtual void DeleteBatch(const vector<IdType>& batchData, int delStrategy /* this flag is method-specific */,
+                           bool checkIDs = false/* this is a debug flag only, turning it on may affect performance */) {
+    throw runtime_error("DeleteBatch is not implemented!");
+  }
+
+  virtual size_t GetSize() const { return data_.size(); }
+protected:
+  const ObjectVector& data_;
 
 private:
   template <typename QueryType>

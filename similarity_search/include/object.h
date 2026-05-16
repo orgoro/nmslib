@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #ifndef _OBJECT_H_
 #define _OBJECT_H_
 
@@ -29,6 +27,7 @@
 #include <cstdint>
 
 #include "global.h"
+#include "utils.h"
 #include "idtype.h"
 #include "logging.h"
 
@@ -51,7 +50,13 @@ using std::numeric_limits;
 
 class Object {
  public:
-  explicit Object(char* buffer) : buffer_(buffer), memory_allocated_(false) {}
+  /*
+   * Memory ownership handling of the Object class is not good, but we keep it this way for historical/compatibility reasons
+   * Currrently, when the second constructor is called, new memory is always allocated.
+   * However, this constructor is nornally called to created an object that reuses someone else's memory.
+   * In NMSLIB 1.8.1 we make it possible to take ownership of the memory provided.
+   */
+  explicit Object(char* buffer, bool memory_allocated=false) : buffer_(buffer), memory_allocated_(memory_allocated) {}
 
   Object(IdType id, LabelType label, size_t datalength, const void* data) {
     buffer_ = new char[ID_SIZE + LABEL_SIZE + DATALENGTH_SIZE + datalength];
@@ -90,7 +95,7 @@ class Object {
   }
 
   inline IdType    id()         const { return *(reinterpret_cast<IdType*>(buffer_)); }
-  inline LabelType label()      const { return *(reinterpret_cast<LabelType*>(buffer_ + LABEL_SIZE)); }
+  inline LabelType label()      const { return *(reinterpret_cast<LabelType*>(buffer_ + ID_SIZE)); }
   inline size_t datalength()    const { return *(reinterpret_cast<size_t*>(buffer_ + LABEL_SIZE + ID_SIZE));}
   inline const char* data() const { return buffer_ + ID_SIZE + LABEL_SIZE+ DATALENGTH_SIZE; }
   inline char* data()             { return buffer_ + ID_SIZE + LABEL_SIZE+ DATALENGTH_SIZE; }
@@ -274,11 +279,20 @@ inline void CreateObjIdToPosMapper(const ObjectVector& data, std::vector<IdType>
     CHECK_MSG(pObj->id() >= 0, "Bug: encountered negative object ID");
     maxId = std::max(maxId, pObj->id());
   }
-  mapper.resize(maxId);
+  mapper.resize(maxId + 1);
   std::fill(mapper.begin(), mapper.end(), -1);
   for (IdTypeUnsign i = 0; i < data.size(); ++i) {
+    CHECK(data[i]->id() >= 0);
+    CHECK(data[i]->id() < mapper.size());
     mapper[data[i]->id()] = i;
   }
+}
+
+inline IdType ConvertId(IdType srcId,  const std::vector<IdType>& mapper) {
+  CHECK_MSG(mapper.size() > 0, "Only non-empty datasets are supported!");
+  CHECK_MSG(srcId >= 0, "Invalid negative source ID");
+  CHECK_MSG(srcId < mapper.size(), "Invalid source ID: " + ConvertToString(srcId) + " max allowed: " + ConvertToString(mapper.size() - 1));
+  return mapper[srcId];
 }
 
 

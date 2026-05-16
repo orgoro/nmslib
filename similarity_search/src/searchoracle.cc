@@ -1,13 +1,12 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
@@ -205,8 +204,8 @@ void PolynomialPruner<dist_t>::SetIndexTimeParams(AnyParamManager& pmgr) {
     float recall = 0, time_best = 0, impr_best = -1, alpha_left = 0, alpha_right = 0; 
     unsigned exp_left = 0, exp_right = 0;
 
-    static  std::random_device          rd;
-    static  std::mt19937                engine(rd());
+
+    static thread_local auto&           randGen(getThreadLocalRandomGenerator());
     static  std::normal_distribution<>  normGen(0.0f, log(fullFactor));
 
 
@@ -218,8 +217,8 @@ void PolynomialPruner<dist_t>::SetIndexTimeParams(AnyParamManager& pmgr) {
 
       if (k > 0) {
         // Let's do some random normal fun
-        alpha_left_loc = exp(normGen(engine));
-        alpha_right_loc = exp(normGen(engine));
+        alpha_left_loc = exp(normGen(randGen));
+        alpha_right_loc = exp(normGen(randGen));
         LOG(LIB_INFO) << " RANDOM STARTING POINTS: " << alpha_left_loc << " " << alpha_right_loc;
       } 
 
@@ -293,7 +292,6 @@ void PolynomialPruner<dist_t>::SetIndexTimeParams(AnyParamManager& pmgr) {
 
 template class PolynomialPruner<int>;
 template class PolynomialPruner<float>;
-template class PolynomialPruner<double>;
 
 
 }

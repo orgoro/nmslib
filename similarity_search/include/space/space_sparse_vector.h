@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #ifndef _SPACE_SPARSE_VECTOR_H_
 #define _SPACE_SPARSE_VECTOR_H_
 
@@ -23,6 +21,7 @@
 #include <algorithm>
 #include <ostream>
 #include <functional>
+#include <cstdint>
 
 #include <string.h>
 #include "global.h"
@@ -30,32 +29,12 @@
 #include "utils.h"
 #include "space.h"
 #include "distcomp.h"
+#include "read_data.h"
 
 namespace similarity {
 
 using std::vector;
 using std::fill;
-
-template <typename dist_t>
-struct SparseVectElem {  
-  uint32_t  id_;
-  dist_t    val_;
-  SparseVectElem(uint32_t id = 0, dist_t val = 0) : id_(id), val_(val) {}
-  bool operator<(const SparseVectElem<dist_t>& that) const {
-    return id_ < that.id_;
-  }
-  bool operator==(const SparseVectElem<dist_t>& that) const {
-    return id_ == that.id_ && val_ == that.val_;
-  }
-  bool operator!=(const SparseVectElem<dist_t>& that) const {
-    return !operator==(that);
-  }
-};
-
-template <typename dist_t>
-ostream& operator<<(ostream& out, SparseVectElem<dist_t> e) {
-  return out << "[" << e.id_ << ": " << e.val_ << "]";
-}
 
 /* 
  * The maximum number of sparse elements that will be kept on the stack
@@ -108,7 +87,7 @@ public:
   virtual size_t GetElemQty(const Object* object) const {return 0;}
 
 protected:
-  void ReadSparseVec(std::string line, size_t line_num, IdType& label, vector<ElemType>& v) const;
+  void ReadSparseVec(std::string line, size_t line_num, LabelType& label, vector<ElemType>& v) const;
   virtual void CreateVectFromObj(const Object* obj, vector<ElemType>& v) const  = 0;
   DISABLE_COPY_AND_ASSIGN(SpaceSparseVector);
 };
@@ -122,7 +101,7 @@ public:
   explicit SpaceSparseVectorSimpleStorage() {}
 
   virtual void CreateDenseVectFromObj(const Object* obj, dist_t* pVect,
-                                 size_t nElem) const {
+                                 size_t nElem) const override {
     static std::hash<size_t>   indexHash;
     fill(pVect, pVect + nElem, static_cast<dist_t>(0));
     const ElemType* beg = reinterpret_cast<const ElemType*>(obj->data());
@@ -141,7 +120,7 @@ public:
 protected:
   DISABLE_COPY_AND_ASSIGN(SpaceSparseVectorSimpleStorage);
 
-  virtual void CreateVectFromObj(const Object* obj, vector<ElemType>& v) const {
+  virtual void CreateVectFromObj(const Object* obj, vector<ElemType>& v) const override {
     const ElemType* beg = reinterpret_cast<const ElemType*>(obj->data());
     const ElemType* const end =
         reinterpret_cast<const ElemType*>(obj->data() + obj->datalength());
@@ -149,8 +128,6 @@ protected:
     v.resize(qty);
     for (size_t i = 0; i < qty; ++i) v[i] = beg[i];
   }
-
-  virtual dist_t HiddenDistance(const Object* obj1, const Object* obj2) const = 0;
 
   /* 
    * This helper function converts a dense vector to a sparse one and then calls a generic distance function.
@@ -167,8 +144,6 @@ protected:
 
     dist_t res = 0;
 
-    CHECK(obj1->datalength() > 0);
-    CHECK(obj2->datalength() > 0);
     const ElemType* beg1 = reinterpret_cast<const ElemType*>(obj1->data());
     const ElemType* beg2 = reinterpret_cast<const ElemType*>(obj2->data());
     const ElemType* end1 = reinterpret_cast<const ElemType*>(obj1->data() + obj1->datalength());

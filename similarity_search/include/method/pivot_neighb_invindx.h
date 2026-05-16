@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib
+ * https://github.com/nmslib/nmslib
  *
- * Copyright (c) 2010--2013
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #ifndef _PIVOT_NEIGHBORHOOD_INVINDEX_H
 #define _PIVOT_NEIGHBORHOOD_INVINDEX_H
 
@@ -47,11 +45,13 @@ using std::mutex;
  * 1) The inverted file is split into small parts. In doing so, we aim to
  *    achieve better caching properties of the counter array used in ScanCount.
  * 2) The index is not compressed (though it could be)
- * 3) Instead of the adaptive union algorithm, we use a well-known ScanCount algorithm (by default). 
+ * 3) We support different number of pivots K during indexing and searching (unlike the original paper),
+ *    which is controlled by the parameter numPrefixSearch.
+ * 4) Instead of the adaptive union algorithm, we use a well-known ScanCount algorithm (by default). 
  *    The overall time spent on processing of the inverted file is 20-30% of the overall
  *    search time. Thus, the retrieval time cannot be substantially improved by
  *    replacing ScanCount with even better approach (should one exist).
- * 4) We also implemented several other simple algorithms for posting processing, to compare
+ * 5) We also implemented several other simple algorithms for posting processing, to compare
  *    against ScanCount. For instance, the merge-sort union algorithms is about 2-3 times as slow.
  *
  *  For an example of using ScanCount see, e.g.:
@@ -83,7 +83,6 @@ class PivotNeighbInvertedIndex : public Index<dist_t> {
   void SetQueryTimeParams(const AnyParams& QueryTimeParams) override;
  private:
 
-  const   ObjectVector&   data_;
   const   Space<dist_t>&  space_;
   bool    PrintProgress_;
   bool    recreate_points_;
@@ -93,23 +92,32 @@ class PivotNeighbInvertedIndex : public Index<dist_t> {
   size_t  knn_amp_;
   float   db_scan_frac_;
   size_t  num_prefix_;       // K in the original paper
+  size_t  num_prefix_search_;// K used during search (our modification can use a different K)
   size_t  min_times_;        // t in the original paper
   bool    use_sort_;
   bool    skip_checking_;
   size_t  index_thread_qty_;
   size_t  num_pivot_;
   string  pivot_file_;
+  bool    disable_pivot_index_;
+  size_t hash_trick_dim_;
+
+  unique_ptr<PivotIndex<dist_t>> pivot_index_;
 
   enum eAlgProctype {
     kScan,
     kMap,
-    kMerge
+    kMerge,
+    kPriorQueue,
+    kWAND
   } inv_proc_alg_;
 
-  string toString(eAlgProctype type) {
+  string toString(eAlgProctype type) const {
     if (type == kScan)   return PERM_PROC_FAST_SCAN;
     if (type == kMap)    return PERM_PROC_MAP;
     if (type == kMerge)  return PERM_PROC_MERGE;
+    if (type == kPriorQueue) return PERM_PROC_PRIOR_QUEUE;
+    if (type == kWAND) return PERM_PROC_WAND;
     return "unknown";
   }
 
@@ -119,21 +127,44 @@ class PivotNeighbInvertedIndex : public Index<dist_t> {
   ObjectVector    genPivot_; // generated pivots
 
   size_t computeDbScan(size_t K, size_t chunkQty) const {
-    size_t totalDbScan = static_cast<size_t>(db_scan_frac_ * data_.size());
+    size_t totalDbScan = static_cast<size_t>(db_scan_frac_ * this->data_.size());
     if (knn_amp_) { 
       totalDbScan = K * knn_amp_;
     }
-    totalDbScan = min(totalDbScan, data_.size());
+    totalDbScan = min(totalDbScan, this->data_.size());
     CHECK_MSG(chunkQty, "Bug or inconsistent parameters: the number of index chunks cannot be zero!");
     return (totalDbScan + chunkQty - 1) / chunkQty;
+  }
+
+  void initPivotIndex() {
+    if (disable_pivot_index_) {
+      pivot_index_.reset(new DummyPivotIndex<dist_t>(space_, pivot_));
+      LOG(LIB_INFO) << "Created a dummy pivot index";
+    } else {
+      pivot_index_.reset(space_.CreatePivotIndex(pivot_, hash_trick_dim_));
+      LOG(LIB_INFO) << "Attempted to create an efficient pivot index (however only few spaces support such index)";
+    }
   }
   
   vector<shared_ptr<vector<PostingListInt>>> posting_lists_;
 
+  struct PostListQueryState {
+    const PostingListInt*  post_;
+    size_t                 post_pos_;
+    PostListQueryState(const PostingListInt& pl)
+        : post_(&pl), post_pos_(0) {}
+  };
+
   template <typename QueryType> void GenSearch(QueryType* query, size_t K) const;
+
+  void GetPermutationPPIndexEfficiently(const Object* object, Permutation& p) const;
+  void GetPermutationPPIndexEfficiently(const Query<dist_t>* query, Permutation& p) const;
+  void GetPermutationPPIndexEfficiently(Permutation &p, const vector <dist_t> &vDst) const;
 
   // disable copy and assign
   DISABLE_COPY_AND_ASSIGN(PivotNeighbInvertedIndex);
+
+  void GetPermutationPPIndexEfficiently(Permutation &p, const vector<bool> &vDst) const;
 };
 
 }  // namespace similarity

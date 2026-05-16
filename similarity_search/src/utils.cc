@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #include <cmath>
 #include <cstring>
 #include <cstdint>
@@ -40,7 +38,6 @@
 
 namespace similarity {
 
-
 const char* GetFileName(const char* fullpath) {
   for (int i = strlen(fullpath) - 1; i >= 0; --i) {
     if (fullpath[i] == '\\' || fullpath[i] == '/') {
@@ -63,31 +60,6 @@ void RStrip(char* str) {
   while ((i >= 0) &&
          (str[i] == '\r' || str[i] == '\n' || str[i] == ' ' || str[i] == '\t'))
     str[i--] = '\0';
-}
-
-double Mean(const double* array, const unsigned size) {
-  double result = 0.0;
-  for (unsigned i = 0; i < size; ++i)
-    result += array[i];
-  return result / size;
-}
-
-double Variance(const double* array, const unsigned size, const double mean) {
-  double result = 0.0;
-  CHECK(size > 1);
-  for (unsigned i = 0; i < size; ++i) {
-    double diff = (mean - array[i]);
-    result += diff * diff; 
-  }
-  return result / size;
-}
-
-double Variance(const double* array, const unsigned size) {
-  return Variance(array, size, Mean(array, size));
-}
-
-double StdDev(const double* array, const unsigned size) {
-  return sqrt(Variance(array, size));
 }
 
 // This macro does two things: (a) specialization (b) instantiation
@@ -141,7 +113,6 @@ inline bool ApproxEqualOther(const T& x, const T& y, unsigned maxUlps) {
 }
 
 template <> bool ApproxEqual<long double>(const long double& x, const long double& y, unsigned maxUlps) {
-  if (ISNAN(x) || ISNAN(y)) return false;\
   const long double thresh = 2*numeric_limits<long double>::min();\
   return ApproxEqualOther(x, y, maxUlps) || (std::max(x,y) < thresh && std::min(x,y) > -thresh);\
 };\

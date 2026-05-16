@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #include <cmath>
 #include <fstream>
 #include <string>
@@ -330,20 +328,12 @@ Object* KLDivFastRightQuery<dist_t>::CreateObjFromVect(IdType id, LabelType labe
 }
 
 template class BregmanDiv<float>;
-template class BregmanDiv<double>;
 template class KLDivAbstract<float>;
-template class KLDivAbstract<double>;
 template class KLDivGenSlow<float>;
-template class KLDivGenSlow<double>;
 template class KLDivGenFast<float>;
-template class KLDivGenFast<double>;
 template class ItakuraSaitoFast<float>;
-template class ItakuraSaitoFast<double>;
 template class KLDivGenFastRightQuery<float>;
-template class KLDivGenFastRightQuery<double>;
 template class KLDivFast<float>;
-template class KLDivFast<double>;
 template class KLDivFastRightQuery<float>;
-template class KLDivFastRightQuery<double>;
 
 }  // namespace similarity

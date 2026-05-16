@@ -1,24 +1,22 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #include <memory>
 
 #include "utils.h"
 #include "logging.h"
-#include "simdutils.h"
+#include "portable_intrinsics.h"
 
 #include "space/space_sparse_vector_inter.h"
 
@@ -157,10 +155,10 @@ ScalarProductFastRes SparseScalarProductFastIntern(const char* pData1, size_t le
       float *pVal2 = val2;
 
       size_t i1 = 0, i2 = 0;
-      size_t iEnd1 = qty1 / 8 * 8;
-      size_t iEnd2 = qty2 / 8 * 8;
 
 #ifdef PORTABLE_SSE4
+      size_t iEnd1 = qty1 / 8 * 8;
+      size_t iEnd2 = qty2 / 8 * 8;
       if (i1 < iEnd1 && i2 < iEnd2) {
         while (pBlockIds1[i1 + 7] < pBlockIds2[i2]) {
           i1 += 8;
@@ -249,18 +247,19 @@ ScalarProductFastRes SparseScalarProductFastIntern(const char* pData1, size_t le
       pBlockBeg1 += elemSize * pBlockQtys1[bid1++];
       pBlockBeg2 += elemSize * pBlockQtys2[bid2++];
 
-      ssize_t resQty = pVal1 - val1;
+      CHECK(pVal1 >= val1);
+      size_t resQty = pVal1 - val1;
 
       CHECK(resQty == pVal2 - val2);
 
 
 #ifdef PORTABLE_SSE4
-      ssize_t resQty4 = resQty / 4 * 4;
+      size_t resQty4 = resQty / 4 * 4;
 
       if (resQty4) {
         __m128 sum128 = _mm_set1_ps(0);
 
-        for (ssize_t k = 0; k < resQty4; k += 4) {
+        for (size_t k = 0; k < resQty4; k += 4) {
           sum128 = _mm_add_ps(sum128,
                               _mm_mul_ps(_mm_loadu_ps(val1 + k),
                                          _mm_loadu_ps(val2 + k)));
@@ -272,14 +271,16 @@ ScalarProductFastRes SparseScalarProductFastIntern(const char* pData1, size_t le
         sum += MM_EXTRACT_FLOAT(sum128, 2);
         sum += MM_EXTRACT_FLOAT(sum128, 3);
 #else
-        sum += mm128_sum(sum128);
+        float PORTABLE_ALIGN16 TmpRes[4];
+        _mm_store_ps(TmpRes, sum128);
+        sum += (TmpRes[0] + TmpRes[1] + TmpRes[2] + TmpRes[3]);
 #endif
       }
 
-      for (ssize_t k = resQty4; k < resQty; ++k)
+      for (size_t k = resQty4; k < resQty; ++k)
           sum += val1[k] * val2[k];
 #else
-      for (ssize_t k = 0; k < resQty; ++k)
+      for (size_t k = 0; k < resQty; ++k)
         sum += val1[k] * val2[k];
 #endif
 
@@ -299,8 +300,8 @@ ScalarProductFastRes SparseScalarProductFastIntern(const char* pData1, size_t le
     pBlockBeg2 += elemSize * pBlockQtys2[bid2++];
   }
 
-  CHECK(pBlockBeg1 - pData1 == (ssize_t) len1);
-  CHECK(pBlockBeg2 - pData2 == (ssize_t) len2);
+  CHECK(pBlockBeg1 - pData1 == (ptrdiff_t) len1);
+  CHECK(pBlockBeg2 - pData2 == (ptrdiff_t) len2);
 
   return ScalarProductFastRes(sum, normCoeff1, normCoeff2);
 }

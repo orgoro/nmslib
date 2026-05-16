@@ -1,13 +1,12 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
@@ -70,6 +69,7 @@ void printResults(KNNQuery<float>* qobj) {
     cout << res->TopObject()->id() << " : " << res->TopDistance() << endl;
     res->Pop();
   }
+  delete res;
 }
 
 void printResults(RangeQuery<float>* qobj) {
@@ -160,26 +160,28 @@ int main(int argc, char* argv[]) {
 
   cout << "We have the space and the query, let's create some search index." << endl;
 
+  int seed = 0;
+
   /* 
    * Init library, specify a log file
    */
   if (LOG_OPTION == 1)
-    initLibrary(LIB_LOGFILE, "logfile.txt"); 
+    initLibrary(seed, LIB_LOGFILE, "logfile.txt"); 
   // No logging 
   if (LOG_OPTION == 2)
-    initLibrary(LIB_LOGNONE, NULL);
-  // Use STDOUT
+    initLibrary(seed, LIB_LOGNONE, NULL);
+  // Use STDERR
   if (LOG_OPTION == 3)
-    initLibrary(LIB_LOGSTDERR, NULL);
+    initLibrary(seed, LIB_LOGSTDERR, NULL);
 
   AnyParams IndexParams(
                         {
                         "NN=11",
-                        "initIndexAttempts=3",
+                        "efConstruction=50",
                         "indexThreadQty=4" /* 4 indexing threads */
                         });
 
-  AnyParams QueryTimeParams( { "initSearchAttempts=3" });
+  AnyParams QueryTimeParams( { "efSearch=50" });
                           
   Index<float>*   indexSmallWorld =  
                         MethodFactoryRegistry<float>::Instance().
@@ -207,10 +209,25 @@ int main(int argc, char* argv[]) {
                                         customSpace,
                                         dataSet);
 
+  Index<float>*   indexVPTreeLoaded =
+                        MethodFactoryRegistry<float>::Instance().
+                                CreateMethod(false /* don't print progress */,
+                                        "vptree",
+                                        "custom",
+                                        customSpace,
+                                        dataSet);
+
   indexVPTree->CreateIndex(IndexParams);
   indexVPTree->SetQueryTimeParams(QueryTimeParams);
 
   cout << "VP-tree index is created!" << endl;
+
+  cout << "Saving VP-tree index to file (vptree.dat)." << endl;
+  indexVPTree->SaveIndex("vptree.dat");
+
+  cout << "Loading VP-tree index from file (vptree.dat)." << endl;
+  indexVPTreeLoaded->LoadIndex("vptree.dat");
+  indexVPTreeLoaded->SetQueryTimeParams(QueryTimeParams);
 
   IndexParams= AnyParams({ "projDim=16",   // Projection dimensionality
                            "projType=perm", // using permutations => the number of pivots is equal to projDim and should be < #of objects
@@ -219,45 +236,20 @@ int main(int argc, char* argv[]) {
   QueryTimeParams = AnyParams({ "dbScanFrac=0.2", // A fraction of the data set to scan
                              });
 
-  Index<float>*   indexPerm = 
-                           MethodFactoryRegistry<float>::Instance().
-                                CreateMethod(false /* don't print progress */,
-                                        "proj_incsort",
-                                        "custom",
-                                         customSpace,
-                                         dataSet);
-
-  indexPerm->CreateIndex(IndexParams);
-  indexPerm->SetQueryTimeParams(QueryTimeParams);
-
-  cout << "Permutation index is created!" << endl;
-
-  /* Now let's try some searches */
-  float radius = 0.12;
-  RangeQuery<float>   rangeQ(customSpace, queryObj, radius);
-
-  //doSearch(indexSmallWorld, &rangeQ); not supported for small world method
-  doSearch(indexVPTree, &rangeQ, REP_QTY);
-  doSearch(indexPerm, &rangeQ, REP_QTY);
-
   unsigned K = 5; // 5-NN query
   KNNQuery<float>   knnQ(customSpace, queryObj, K);
 
   cout << "Setting one value of a query-time param (small  world)" << endl;
-  indexSmallWorld->SetQueryTimeParams(AnyParams({ "initSearchAttempts=3" }));
+  indexSmallWorld->SetQueryTimeParams(AnyParams({ "efSearch=100" }));
   doSearch(indexSmallWorld, &knnQ, REP_QTY);
   cout << "Setting one value of a query-time param (small  world)" << endl;
-  indexSmallWorld->SetQueryTimeParams(AnyParams({ "initSearchAttempts=1" }));
+  indexSmallWorld->SetQueryTimeParams(AnyParams({ "efSearch=50" }));
   doSearch(indexSmallWorld, &knnQ, REP_QTY);
 
   doSearch(indexVPTree, &knnQ, REP_QTY);
 
-  cout << "Setting one value of a query-time param (permutation method)" << endl;
-  indexPerm->SetQueryTimeParams(AnyParams( { "dbScanFrac=0.05" }));
-  doSearch(indexPerm, &knnQ, REP_QTY);
-  cout << "Setting another value of a query-time param (permutation method)" << endl;
-  indexPerm->SetQueryTimeParams(AnyParams( { "dbScanFrac=0.5" }));
-  doSearch(indexPerm, &knnQ, REP_QTY);
+  cout << "Searching in loaded VP tree" << endl;
+  doSearch(indexVPTreeLoaded, &knnQ, REP_QTY);
 
   cout << "Saving vectors to a file: " << endl;
 
@@ -270,7 +262,6 @@ int main(int argc, char* argv[]) {
 
   delete indexSmallWorld;
   delete indexVPTree;
-  delete indexPerm;
 
   delete queryObj;
 

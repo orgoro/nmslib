@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #include <cmath>
 #include <fstream>
 #include <string>
@@ -27,30 +25,30 @@
 #include "logging.h"
 #include "distcomp.h"
 #include "experimentconf.h"
+#include "read_data.h"
 
 namespace similarity {
 
 using namespace std;
 
 template <typename dist_t>
-void SpaceSparseVector<dist_t>::ReadSparseVec(std::string line, size_t line_num, LabelType& label, vector<ElemType>& v) const
+void SpaceSparseVector<dist_t>::ReadSparseVec(string line, size_t line_num, LabelType& label, vector<ElemType>& v) const
 {
   v.clear();
 
   label = Object::extractLabel(line);
 
-  ReplaceSomePunct(line); 
-  std::stringstream str(line);
-
-  str.exceptions(std::ios::badbit);
-
-  uint32_t id;
-  dist_t   val;
+#if 0
+  if (!ReadSparseVecDataViaStream(line, v)) {
+#else
+  if (!ReadSparseVecDataEfficiently(line, v)) {
+#endif
+    PREPARE_RUNTIME_ERR(err) << "Failed to parse the line # " << line_num << ": '" << line << "'" << std::endl;
+    LOG(LIB_ERROR) << err.stream().str();
+    THROW_RUNTIME_ERR(err);
+  }
 
   try {
-    while (str >> id && str >> val) {
-      v.push_back(ElemType(id, val));
-    }
     sort(v.begin(), v.end());
 
     for (unsigned i = 1; i < v.size(); ++i) {
@@ -70,9 +68,9 @@ void SpaceSparseVector<dist_t>::ReadSparseVec(std::string line, size_t line_num,
       }
     }
   } catch (const std::exception &e) {
-    LOG(LIB_ERROR) << "Exception: " << e.what() << std::endl;
+    LOG(LIB_ERROR) << "Exception: " << e.what();
     PREPARE_RUNTIME_ERR(err) << "Failed to parse the line # " << line_num << ": '" << line << "'" << std::endl;
-    LOG(LIB_ERROR) << err.stream().str() << std::endl;
+    LOG(LIB_ERROR) << err.stream().str();
     THROW_RUNTIME_ERR(err);
   }
 
@@ -143,22 +141,18 @@ bool SpaceSparseVector<dist_t>::ReadNextObjStr(DataFileInputState &inpStateBase,
   DataFileInputStateOneFile* pInpState = dynamic_cast<DataFileInputStateOneFile*>(&inpStateBase);
   CHECK_MSG(pInpState != NULL, "Bug: unexpected reference type");
   if (!pInpState->inp_file_) return false;
-  if (!getline(pInpState->inp_file_, strObj)) return false;
-  if (strObj.empty()) {
-    PREPARE_RUNTIME_ERR(err) << "Encountered an empty line (not allowed), line # " << pInpState->line_num_; 
-    THROW_RUNTIME_ERR(err);
-  }
-  pInpState->line_num_++;
+  do {
+    if (!getline(pInpState->inp_file_, strObj)) return false;
+    if (strObj.empty()) {
+      LOG(LIB_INFO) << "Encountered an empty line (IGNORING), line # " << pInpState->line_num_; 
+    }
+    pInpState->line_num_++;
+  } while (strObj.empty());
   return true;
 }
 
-/* 
- * We don't instantiate sparse vector spaces for types other than float & double
- */
 template class SpaceSparseVector<float>;
-template class SpaceSparseVector<double>;
 
 template class SpaceSparseVectorSimpleStorage<float>;
-template class SpaceSparseVectorSimpleStorage<double>;
 
 }  // namespace similarity

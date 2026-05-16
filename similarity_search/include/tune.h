@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #ifndef TUNE_H
 #define TUNE_H
 
@@ -168,10 +166,13 @@ void GetOptimalAlphas(bool bPrintProgres,
           vector<shared_ptr<AnyParams>> vQueryTimeParams;
           vQueryTimeParams.push_back(shared_ptr<AnyParams>(new AnyParams(QueryTimeParams)));
 
+          const bool recallOnly = true; // don't need anything except recall here
+
           Experiments<dist_t>::RunAll(false /* don't print info */, 
                                       ThreadTestQty,
                                       TestSetId,
                                       *vManagerGS[TestSetId],
+                                      recallOnly,
                                       ExpResRange, ExpResKNN,
                                       config, 
                                       *MethodPtr,

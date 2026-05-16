@@ -1,19 +1,17 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-
 #ifndef _UTILS_H_
 #define _UTILS_H_
 
@@ -23,6 +21,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <sstream>
+#include <fstream>
 #include <string>
 #include <vector>
 #include <cstring>
@@ -32,6 +31,7 @@
 #include <random>
 #include <climits>
 #include <stdexcept>
+#include <memory>
 
 #include "idtype.h"
 
@@ -44,12 +44,14 @@
  * cross-platform warnings
  * is taken from http://stackoverflow.com/a/1911632/2120401
  * Use: #pragma message WARN("My message")
+ * Use: #pragma message INFO("My message")
  *
  * Note: We may need other other definitions for other compilers,
  *       but so far it worked for MSVS, GCC, CLang, and Intel.
  */
 #   define FILE_LINE_LINK __FILE__ "(" STRINGISE(__LINE__) ") : "
 #   define WARN(exp) (FILE_LINE_LINK "WARNING: " exp)
+#   define INFO(exp) (FILE_LINE_LINK "INFO: " exp)
 
 #ifdef _MSC_VER
 #define PATH_SEPARATOR "\\"
@@ -57,30 +59,20 @@
 #define PATH_SEPARATOR "/"
 #endif
 
-
-#ifdef _MSC_VER
-#define ISNAN _isnan
-#define __func__ __FUNCTION__ 
-#else
-#define ISNAN std::isnan
-#endif
-
-#if defined(_MSC_VER)
-#include <BaseTsd.h>
-typedef SSIZE_T ssize_t;
-#endif
-
 #define FIELD_DELIMITER ':'
+
+#define NMSLIB_SIZE_T_MAX (std::numeric_limits<size_t>::max())
+
 
 namespace similarity {
 
 using std::string;
 using std::vector;
 using std::stringstream;
-using std::random_device;
-using std::mt19937;
 
 using namespace std;
+
+typedef std::mt19937 RandomGeneratorType;
 
 
 const char* GetFileName(const char* fullpath);
@@ -91,34 +83,93 @@ bool DoesFileExist(const char *filename);
 
 inline bool DoesFileExist(const string &filename) { return DoesFileExist(filename.c_str()); }
 
-inline int RandomInt() {
-    // Static is thread-safe in C++ 11
-    static random_device rdev;
-    static mt19937 gen(rdev());
-    static std::uniform_int_distribution<int> distr(0, std::numeric_limits<int>::max());
+
+/*
+ * 1. Random number generation is thread safe when respective
+ *    objects are not shared among threads. So, we will keep one
+ *    random number generator per thread.
+ * 2. There is a default seed to initialize all random generators.
+ * 3. However, sometimes we may want to reset the random number generator
+ *    within a working thread (i.e., this would be only a thread-specific change).
+ *    In particular, this is needed to improve reproducibility of integration tests.
+ */ 
+extern int                                                defaultRandomSeed;
+
+inline RandomGeneratorType& getThreadLocalRandomGenerator() {
+  static thread_local RandomGeneratorType  randomGen(defaultRandomSeed);
+
+  return randomGen;
+}
+
+// random 32-bit integer number
+inline int32_t RandomInt() {
+    /*
+     * Random number generation is thread safe when respective
+     * objects are not shared among threads. So, we will keep one
+     * random number generator per thread.
+    */ 
+    // thread_local is static by default, but let's keep it static for clarity
+    static thread_local std::uniform_int_distribution<int32_t> distr(0, std::numeric_limits<int32_t>::max());
    
-    return distr(gen); 
+    return distr(getThreadLocalRandomGenerator()); 
 }
 
 template <class T>
+// random real number from 0 (inclusive) to 1 (exclusive)
 inline T RandomReal() {
-    // Static is thread-safe in C++ 11
-    static random_device rdev;
-    static mt19937 gen(rdev());
-    static std::uniform_real_distribution<T> distr(0, 1);
+    /*
+     * Random number generation is thread safe when respective
+     * objects are not shared among threads. So, we will keep one
+     * random number generator per thread.
+    */ 
+    // thread_local is static by default, but let's keep it static for clarity
+    static thread_local std::uniform_real_distribution<T> distr(0, 1);
 
-    return distr(gen); 
+    return distr(getThreadLocalRandomGenerator()); 
 }
 
 void RStrip(char* str);
 
-double Mean(const double* array, const unsigned size);
+template <typename dist_t>
+dist_t Mean(const dist_t* array, const unsigned size) {
+  if (!size) return 0;
+  dist_t result = 0.0;
+  for (unsigned i = 0; i < size; ++i)
+    result += array[i];
+  return result / size;
+}
 
-double Variance(const double* array, const unsigned size);
+template <typename dist_t>
+dist_t Sum(const dist_t* array, const unsigned size) {
+  dist_t result = 0.0;
+  for (unsigned i = 0; i < size; ++i)
+    result += array[i];
+  return result;
+}
 
-double Variance(const double* array, const unsigned size, const double mean);
+// This is a corrected sample STD, so size should be >= 2
+template <typename dist_t>
+dist_t Variance(const dist_t* array, const unsigned size, const dist_t mean) {
+  dist_t result = 0.0;
+  if (size >= 2) {
+    for (unsigned i = 0; i < size; ++i) {
+      dist_t diff = (mean - array[i]);
+      result += diff * diff; 
+    }
+    result /= (size-1);
+  }
+  return result;
+}
 
-double StdDev(const double* array, const unsigned size);
+template <typename dist_t>
+dist_t Variance(const dist_t* array, const unsigned size) {
+  return Variance(array, size, Mean(array, size));
+}
+
+template <typename dist_t>
+dist_t StdDev(const dist_t* array, const unsigned size) {
+  return sqrt(Variance(array, size));
+}
 
 /*
  * A maximum number of random operations (e.g. while searching
@@ -218,7 +269,7 @@ inline void ConvertFromString<string>(const string& s, string& o) {
 }
 
 /*
- * "fields" each occupy a single line, they are in the format:
+ * Text "fields" each occupy a single line, they are in the format:
  * fieldName:fieldValue.
  */
 
@@ -248,6 +299,29 @@ inline void WriteField(ostream& out, const string& fieldName, const FieldType& f
   }
 }
 
+
+template <typename T> 
+void writeBinaryPOD(ostream& out, const T& podRef) {
+  out.write((char*)&podRef, sizeof(T));
+}
+
+template <typename T> 
+static void readBinaryPOD(istream& in, T& podRef) {
+  in.read((char*)&podRef, sizeof(T));
+}
+
+template <typename T>
+static void readBinaryPOD(const void* in, T& podRef) {
+  std::memcpy((char*)&podRef, in, sizeof(T));
+}
+
+template <typename T>
+void writeBinaryPOD(void* out, const T& podRef) {
+  std::memcpy(out, (char*)&podRef, sizeof(T));
+}
+
+/**/
+
 inline void ToLower(string &s) {
   for (size_t i = 0; i < s.size(); ++i) s[i] = std::tolower(s[i]);
 }
@@ -267,6 +341,14 @@ inline bool HasWhiteSpace(const string& s) {
 inline void ReplaceSomePunct(string &s) {
   for (size_t i = 0; i < s.size(); ++i)
     if (s[i] == ',' || s[i] == FIELD_DELIMITER) s[i] = ' ';
+}
+
+template <class T>
+T getRelDiff(T val1, T val2) {
+  T diff = std::fabs(val1 - val2);
+  T maxVal = std::max(std::fabs(val1), std::fabs(val2));
+  T diffRel = diff/ std::max(maxVal, numeric_limits<T>::min()) ;
+  return diffRel;
 }
 
 template <class T>

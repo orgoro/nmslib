@@ -1,13 +1,12 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
@@ -19,10 +18,14 @@
 
 #include <iostream>
 #include <memory>
+#include <algorithm>
 #include <cmath>
+#include <spacefactory.h>
 
 #include "bunit.h"
 #include "space.h"
+
+#include "method/hnsw_distfunc_opt_impl_inline.h"
 #include "space/space_sparse_lp.h"
 #include "space/space_sparse_scalar.h"
 #include "space/space_sparse_vector_inter.h"
@@ -42,6 +45,13 @@
 namespace similarity {
 
 using namespace std;
+
+// TmpRes needs to be defined using TMP_RES_ARRAY
+float NormCosineSIMD(const float *pVect1, const float *pVect2, size_t &qty, float * __restrict TmpRes);
+/*
+ * Important note: This function is applicable only when both vectors are normalized!
+ */
+float NegativeDotProductSIMD(const float *pVect1, const float *pVect2, size_t &qty, float *TmpRes);
 
 
 /*
@@ -113,6 +123,24 @@ void TestSparsePackUnpack() {
   }
 }
 
+TEST(NormScalarProductForZeroVectors) {
+  const size_t DIM = 4;
+  float allZeros[DIM] = {0, 0, 0, 0};
+  float allOnes[DIM] = {1, 1, 1, 1};
+
+  EXPECT_EQ_EPS(NormScalarProduct(allZeros, allZeros, DIM), 0.f, 1e-5f);
+  EXPECT_EQ_EPS(NormScalarProduct(allZeros, allOnes, DIM), 0.f, 1e-5f);
+}
+
+TEST(NormScalarProductSIMDForZeroVectors) {
+  const size_t DIM = 4;
+  float allZeros[DIM] = {0, 0, 0, 0};
+  float allOnes[DIM] = {1, 1, 1, 1};
+
+  EXPECT_EQ_EPS(NormScalarProductSIMD(allZeros, allZeros, DIM), 0.f, 1e-5f);
+  EXPECT_EQ_EPS(NormScalarProductSIMD(allZeros, allOnes, DIM), 0.f, 1e-5f);
+}
+
 TEST(BlockZeros) {
   for (size_t id = 0 ; id <= 3*65536; id++) {
     size_t id1 = removeBlockZeros(id);
@@ -128,7 +156,6 @@ TEST(DISABLE_SparsePackUnpack) {
 TEST(SparsePackUnpack) {
 #endif
   TestSparsePackUnpack<float>();
-  TestSparsePackUnpack<double>();
 }
 
 TEST(TestEfficientPower) {
@@ -183,6 +210,72 @@ bool TestScalarProductAgree(size_t N, size_t dim, size_t Rep) {
             if (diffRel > maxRelDiff && diff > maxAbsDiff) {
                 bug = true;
                 cerr << "Bug ScalarProduct !!! Dim = " << dim << " val1 = " << val1 << " val2 = " << val2 <<  " diff=" << diff << " diffRel=" << diffRel << endl;
+            }
+
+            if (bug) return false;
+        }
+    }
+
+    return true;
+}
+
+bool TestScalarProductAVXAgree(size_t N, size_t dim, size_t Rep) {
+    vector<float> vect1(dim), vect2(dim);
+    float* pVect1 = &vect1[0];
+    float* pVect2 = &vect2[0];
+
+    float maxRelDiff = 1e-6f;
+    float maxAbsDiff = 1e-6f;
+
+    TMP_RES_ARRAY(tmpRes);
+
+    for (size_t i = 0; i < Rep; ++i) {
+        for (size_t j = 1; j < N; ++j) {
+            GenRandVect(pVect1, dim, float(1), float(2), true /* do normalize */);
+            GenRandVect(pVect2, dim, float(1), float(2), true /* do normalize */);
+
+            float val1 = ScalarProduct(pVect1, pVect2, dim);
+            float val2 = ScalarProduct(pVect1, pVect2, dim, tmpRes);
+
+            bool bug = false;
+            float diff = fabs(val1 - val2);
+            float diffRel = diff/max(max(fabs(val1),fabs(val2)),float(1e-18));
+            if (diffRel > maxRelDiff && diff > maxAbsDiff) {
+                bug = true;
+                cerr << "Bug " << __func__ << " !!! Dim = " << dim << " val1 = " << val1 << " val2 = " << val2 <<  " diff=" << diff << " diffRel=" << diffRel << endl;
+            }
+
+            if (bug) return false;
+        }
+    }
+
+    return true;
+}
+
+bool TestScalarProductSSEAgree(size_t N, size_t dim, size_t Rep) {
+    vector<float> vect1(dim), vect2(dim);
+    float* pVect1 = &vect1[0];
+    float* pVect2 = &vect2[0];
+
+    float maxRelDiff = 1e-6f;
+    float maxAbsDiff = 1e-6f;
+
+    TMP_RES_ARRAY(tmpRes);
+
+    for (size_t i = 0; i < Rep; ++i) {
+        for (size_t j = 1; j < N; ++j) {
+            GenRandVect(pVect1, dim, float(1), float(2), true /* do normalize */);
+            GenRandVect(pVect2, dim, float(1), float(2), true /* do normalize */);
+
+            float val1 = ScalarProduct(pVect1, pVect2, dim);
+            float val2 = ScalarProduct(pVect1, pVect2, dim, tmpRes);
+
+            bool bug = false;
+            float diff = fabs(val1 - val2);
+            float diffRel = diff/max(max(fabs(val1),fabs(val2)),float(1e-18));
+            if (diffRel > maxRelDiff && diff > maxAbsDiff) {
+                bug = true;
+                cerr << "Bug " << __func__ << " !!! Dim = " << dim << " val1 = " << val1 << " val2 = " << val2 <<  " diff=" << diff << " diffRel=" << diffRel << endl;
             }
 
             if (bug) return false;
@@ -321,6 +414,108 @@ bool TestL2Agree(size_t N, size_t dim, size_t Rep) {
 
 
     return true;
+}
+
+bool TestL2SqrExtSSEAgree(size_t N, size_t dim, size_t Rep) {
+    vector<float> vect1(dim), vect2(dim);
+    float* pVect1 = &vect1[0];
+    float* pVect2 = &vect2[0];
+    TMP_RES_ARRAY(tmpRes);
+
+    for (size_t i = 0; i < Rep; ++i) {
+        for (size_t j = 1; j < N; ++j) {
+            GenRandVect(pVect1, dim, -float(RANGE), float(RANGE));
+            GenRandVect(pVect2, dim, -float(RANGE), float(RANGE));
+
+            float val1 = L2NormStandard(pVect1, pVect2, dim);
+            val1 = val1 * val1;
+            float val2 = L2SqrExt(pVect1, pVect2, dim, tmpRes);
+
+            bool bug = false;
+
+            if (fabs(val1 - val2)/max(max(val1,val2),float(1e-18)) > 1e-6) {
+                cerr << "Bug " << __func__ << " !!! Dim = " << dim << " val1 = " << val1 << " val2 = " << val2 << endl;
+                bug = true;
+            }
+
+            if (bug) return false;
+        }
+    }
+
+
+    return true;
+}
+
+bool TestL2Sqr16ExtAVXAgree(size_t N, size_t dim, size_t Rep) {
+  vector<float> vect1(dim), vect2(dim);
+  float* pVect1 = &vect1[0];
+  float* pVect2 = &vect2[0];
+  TMP_RES_ARRAY(tmpRes);
+
+  for (size_t i = 0; i < Rep; ++i) {
+    for (size_t j = 1; j < N; ++j) {
+      GenRandVect(pVect1, dim, -float(RANGE), float(RANGE));
+      GenRandVect(pVect2, dim, -float(RANGE), float(RANGE));
+
+      float val1 = L2NormStandard(pVect1, pVect2, dim);
+      val1 = val1 * val1;
+      float val2 = L2Sqr16Ext(pVect1, pVect2, dim, tmpRes);
+
+      bool bug = false;
+
+      /*
+         A little higher error bar here, because this function is going to be tested using a large number of dimensions
+         so these little errors seem to accumulate more.
+      */
+      if (fabs(val1 - val2)/max(max(val1,val2),float(1e-18)) > 1e-5) {
+        cerr << "Bug " << __func__ << " !!! Dim = " << dim <<
+             " val1 = " << std::setprecision(6) << val1 <<
+             " val2 = " << std::setprecision(6) << val2 << endl;
+        bug = true;
+      }
+
+      if (bug) return false;
+    }
+  }
+
+
+  return true;
+}
+
+bool TestL2Sqr16ExtSSEAgree(size_t N, size_t dim, size_t Rep) {
+  vector<float> vect1(dim), vect2(dim);
+  float* pVect1 = &vect1[0];
+  float* pVect2 = &vect2[0];
+  TMP_RES_ARRAY(tmpRes);
+
+  for (size_t i = 0; i < Rep; ++i) {
+    for (size_t j = 1; j < N; ++j) {
+      GenRandVect(pVect1, dim, -float(RANGE), float(RANGE));
+      GenRandVect(pVect2, dim, -float(RANGE), float(RANGE));
+
+      float val1 = L2NormStandard(pVect1, pVect2, dim);
+      val1 = val1 * val1;
+      float val2 = L2Sqr16Ext(pVect1, pVect2, dim, tmpRes);
+
+      bool bug = false;
+
+      /*
+         A little higher error bar here, because this function is going to be tested using a large number of dimensions
+         so these little errors seem to accumulate more.
+      */
+      if (fabs(val1 - val2)/max(max(val1,val2),float(1e-18)) > 1e-5) {
+        cerr << "Bug " << __func__ << " !!! Dim = " << dim <<
+             " val1 = " << std::setprecision(6) << val1 <<
+             " val2 = " << std::setprecision(6) << val2 << endl;
+        bug = true;
+      }
+
+      if (bug) return false;
+    }
+  }
+
+
+  return true;
 }
 
 template <class T>
@@ -549,7 +744,106 @@ bool TestJSAgree(size_t N, size_t dim, size_t Rep, double pZero) {
     }
 
     LOG(LIB_INFO) << typeid(T).name() << " JS approximation error: average absolute: " << Error / TotalQty << 
-                                " avg. dist: " << Dist / TotalQty << " average relative: " << Error/Dist;
+                                " avg. dist: " << Dist / TotalQty << " average relative: " << Error/max(Dist, T(1e-18));
+
+
+    return true;
+}
+
+template <class T>
+bool TestRenyiDivAgree(size_t N, size_t dim, size_t Rep, T alpha) {
+    vector<T> vect1(dim), vect2(dim);
+    T* pVect1 = &vect1[0]; 
+    T* pVect2 = &vect2[0];
+
+    T Dist = 0;
+    T Error = 0;
+    T TotalQty = 0;
+
+    for (size_t i = 0; i < Rep; ++i) {
+        for (size_t j = 1; j < N; ++j) {
+            GenRandVect(pVect1, dim, T(RANGE_SMALL), T(1.0), true);
+            GenRandVect(pVect2, dim, T(RANGE_SMALL), T(1.0), true);
+
+            Normalize(pVect1, dim);
+            Normalize(pVect2, dim);
+
+            T val0 = renyiDivergenceSlow(pVect1, pVect2, dim, alpha);
+            T val1 = renyiDivergenceFast(pVect1, pVect2, dim, alpha);
+
+            bool bug = false;
+
+            T AbsDiff1 = fabs(val1 - val0);
+            T RelDiff1 = AbsDiff1/max(max(fabs(val1),fabs(val0)),T(1e-18));
+
+            Dist += fabs(val1);
+            Error += AbsDiff1;
+            ++TotalQty;
+
+            if (RelDiff1 > 1e-5 && AbsDiff1 > 1e-5) {
+                cerr << "Bug Reniy Div. (1) " << typeid(T).name() << " !!! Dim = " << dim 
+                     << "alpha=" << alpha << " val0 = " << val0 << " val1 = " << val1 
+                     << " Diff: " << (val0 - val1) << " RelDiff1: " << RelDiff1 
+                     << " AbsDiff1: " << AbsDiff1 << endl;
+                bug = true;
+            }
+
+            if (bug) return false;
+        }
+    }
+
+    // For dim == 1, this divergence is always zero since the only 1-dim probability distribution vector
+    // is 1.
+    LOG(LIB_INFO) << typeid(T).name() << " Renyi Div. approximation error: average absolute: " << Error / TotalQty << 
+                                 " avg. dist: " << Dist / TotalQty << " average relative: " << Error/max(Dist, T(1e-18));
+
+
+    return true;
+}
+
+template <class T>
+bool TestAlphaBetaDivAgree(size_t N, size_t dim, size_t Rep, T alpha, T beta) {
+    vector<T> vect1(dim), vect2(dim);
+    T* pVect1 = &vect1[0]; 
+    T* pVect2 = &vect2[0];
+
+    T Dist = 0;
+    T Error = 0;
+    T TotalQty = 0;
+
+    for (size_t i = 0; i < Rep; ++i) {
+        for (size_t j = 1; j < N; ++j) {
+            GenRandVect(pVect1, dim, T(RANGE_SMALL), T(1.0), true);
+            GenRandVect(pVect2, dim, T(RANGE_SMALL), T(1.0), true);
+
+            Normalize(pVect1, dim);
+            Normalize(pVect2, dim);
+
+            T val0 = alphaBetaDivergenceSlow(pVect1, pVect2, dim, alpha, beta);
+            T val1 = alphaBetaDivergenceFast(pVect1, pVect2, dim, alpha, beta);
+
+            bool bug = false;
+
+            T AbsDiff1 = fabs(val1 - val0);
+            T RelDiff1 = AbsDiff1/max(max(fabs(val1),fabs(val0)),T(1e-18));
+
+            Dist += fabs(val1);
+            Error += AbsDiff1;
+            ++TotalQty;
+
+            if (RelDiff1 > 1e-5 && AbsDiff1 > 1e-5) {
+                cerr << "Bug alpha-beta Div. (1) " << typeid(T).name() << " !!! Dim = " << dim 
+                     << "alpha=" << alpha << " val0 = " << val0 << " val1 = " << val1 
+                     << " Diff: " << (val0 - val1) << " RelDiff1: " << RelDiff1 
+                     << " AbsDiff1: " << AbsDiff1 << endl;
+                bug = true;
+            }
+
+            if (bug) return false;
+        }
+    }
+
+    LOG(LIB_INFO) << typeid(T).name() << " alpha-beta div. approximation error: average absolute: " << Error / TotalQty << " avg. dist: " << Dist / TotalQty << " average relative: " << Error/Dist;
 
 
     return true;
@@ -736,8 +1030,8 @@ bool TestSparseAngularDistanceAgree(const string& dataFile, size_t N, size_t Rep
 
     bool bug = false;
 
-    float maxRelDiff = 2e-5f;
-    float maxAbsDiff = 1e-6f;
+    float maxRelDiff = 2.5e-5f;
+    float maxAbsDiff = 2.5e-6f;
 
     for (size_t j = Rep; j < N; ++j)
         for (size_t k = j - Rep; k < j; ++k) {
@@ -785,8 +1079,8 @@ bool TestSparseCosineSimilarityAgree(const string& dataFile, size_t N, size_t Re
 
     bool bug = false;
 
-    float maxRelDiff = 1e-6f;
-    float maxAbsDiff = 1e-6f;
+    float maxRelDiff = 1e-5f;
+    float maxAbsDiff = 1e-5f;
 
     for (size_t j = Rep; j < N; ++j) 
     for (size_t k = j - Rep; k < j; ++k) {
@@ -905,6 +1199,74 @@ bool TestSparseQueryNormNegativeScalarProductAgree(const string& dataFile, size_
     return true;
 }
 
+// Limitation: this is only for spaces without params
+bool TestPivotIndex(const string& spaceName,
+                    bool useDummyIndex,
+                    const string& dataFile, size_t dataQty,
+                    const string& pivotFile, size_t pivotQty) {
+
+  LOG(LIB_INFO) << "space: " << spaceName << " real pivot index?: " << !useDummyIndex << " " <<
+                   " dataFile: " << dataFile << " " <<
+                   " pivotFile: " << pivotFile;
+  try {
+    typedef float T;
+
+    AnyParams emptyParams;
+
+    unique_ptr<Space<T>> space(SpaceFactoryRegistry<T>::Instance().CreateSpace(spaceName, emptyParams));
+
+    ObjectVector                                 data;
+    ObjectVector                                 pivots;
+    vector<string>                               tmp;
+
+    float maxRelDiff = 1e-6f;
+    float maxAbsDiff = 1e-6f;
+
+    unique_ptr<DataFileInputState> inpStateFast(space->ReadDataset(data, tmp, dataFile,  dataQty));
+    space->UpdateParamsFromFile(*inpStateFast);
+    space->ReadDataset(pivots, tmp, pivotFile, pivotQty);
+
+    unique_ptr<PivotIndex<T>>  pivIndx(useDummyIndex ? 
+      new DummyPivotIndex<T>(*space, pivots)
+       :
+      space->CreatePivotIndex(pivots,
+                              0 /* Let's not test using the hashing trick here, b/c distances would be somewhat different */));
+
+    for (size_t did = 0; did < dataQty; ++did) {
+      vector<T> vDst;
+      pivIndx->ComputePivotDistancesIndexTime(data[did], vDst);
+      CHECK_MSG(vDst.size() == pivotQty, "ComputePivotDistancesIndexTime returns incorrect # of elements different from the # of pivots");
+
+      for (size_t pid = 0; pid < pivotQty; ++pid) {
+        T val2 = space->IndexTimeDistance(pivots[pid], data[did]);
+        T val1 = vDst[pid];
+
+        float AbsDiff1 = fabs(val1 - val2);
+        float RelDiff1 = AbsDiff1/max(max(fabs(val1),fabs(val2)),T(1e-18));
+
+        if (RelDiff1 > maxRelDiff && AbsDiff1 > maxAbsDiff) {
+            cerr << "Bug in fast computation of all-pivot distance, " << 
+              " space: " << spaceName << " real pivot index?: " << !useDummyIndex << endl <<
+              " dataFile: " << dataFile << endl <<
+              " pivotFile: " << pivotFile << endl <<
+              " data index: " << did << " pivot index: " << pid << endl <<
+              " val1 = " << val1 << " val2 = " << val2 <<
+              " Diff: " << (val1 - val2) <<
+              " RelDiff1: " << RelDiff1 <<
+              " AbsDiff1: " << AbsDiff1 << endl;
+            return false;
+        }
+      }
+    }
+  } catch (const exception& e) {
+    LOG(LIB_INFO) << "Got exception while testing: " << e.what();
+    return false;
+  }
+  return true;
+}
+
+
+
 
 #ifdef DISABLE_LONG_TESTS
 TEST(DISABLE_TestAgree) {
@@ -953,6 +1315,19 @@ TEST(TestAgree) {
         nFail += !TestBitHammingAgree(1000, dim, 1000);
     }
 
+    for (unsigned dim = 16; dim <= 256; dim += 16) {
+        LOG(LIB_INFO) << "Dim = " << dim;
+
+
+        // This function is good only for multiples of 16
+        nTest++;
+        nFail += !TestL2Sqr16ExtAVXAgree(1024, dim, 10);
+
+        // This function is good only for multiples of 16
+        nTest++;
+        nFail += !TestL2Sqr16ExtSSEAgree(1024, dim, 10);
+    }
+
     for (unsigned dim = 1; dim <= 32; ++dim) {
         LOG(LIB_INFO) << "Dim = " << dim;
 
@@ -963,23 +1338,47 @@ TEST(TestAgree) {
         if (dim <= 8) {
 
           for (float power = 0.125; power <= 32; power += 0.125) {
-            TestLPGenericAgree(1024, dim, 10, power);
+            TestLPGenericAgree<float>(1024, dim, 10, power);
+          }
+          for (double power = 0.125; power <= 32; power += 0.125) {
+            TestLPGenericAgree<float>(1024, dim, 10, power);
           }
 
-          for (double power = 0.125; power <= 32; power += 0.125) {
-            TestLPGenericAgree(1024, dim, 10, power);
+          // In the case of Renyi divergence 0 < alpha < 1, 1 < alpha < infinity
+          // https://en.wikipedia.org/wiki/R%C3%A9nyi_entropy#R%C3%A9nyi_divergence
+          for (float alpha = 0.125; alpha <= 2; alpha += 0.125) {
+            if (fabs(alpha - 1) < 1e-6) continue;
+            TestRenyiDivAgree<float>(1024, dim, 10, alpha);
+          }
+          for (double alpha = 0.125; alpha <= 2; alpha += 0.125) {
+            if (fabs(alpha - 1) < 1e-6) continue;
+            TestRenyiDivAgree<float>(1024, dim, 10, alpha);
+          }
+
+          for (float alpha = -2; alpha <= 2; alpha += 0.5) 
+          for (float beta = -2; beta <= 2; beta += 0.5) 
+          {
+            TestAlphaBetaDivAgree<float>(1024, dim, 10, alpha, beta);
+          }
+
+          for (double alpha = -2; alpha <= 2; alpha += 0.5) 
+          for (double beta = -2; beta <= 2; beta += 0.5) 
+          {
+            TestAlphaBetaDivAgree<float>(1024, dim, 10, alpha, beta);
           }
         }
 
         nTest++;
         nFail += !TestNormScalarProductAgree<float>(1024, dim, 10);
-        nTest++;
-        nFail += !TestNormScalarProductAgree<double>(1024, dim, 10);
 
         nTest++;
         nFail += !TestScalarProductAgree<float>(1024, dim, 10);
+
         nTest++;
-        nFail += !TestScalarProductAgree<double>(1024, dim, 10);
+        nFail += !TestScalarProductAVXAgree(1024, dim, 10);
+
+        nTest++;
+        nFail += !TestScalarProductSSEAgree(1024, dim, 10);
 
         nTest++;
         nFail += !TestSpearmanFootruleAgree(1024, dim, 10);
@@ -989,44 +1388,66 @@ TEST(TestAgree) {
 
         nTest++;
         nFail += !TestJSAgree<float>(1024, dim, 10, 0.5);
-        nTest++;
-        nFail += !TestJSAgree<double>(1024, dim, 10, 0.5);
 
         nTest++;
         nFail += !TestKLGeneralAgree<float>(1024, dim, 10);
-        nTest++;
-        nFail += !TestKLGeneralAgree<double>(1024, dim, 10);
 
         nTest++;
         nFail += !TestLInfAgree<float>(1024, dim, 10);
-        nTest++;
-        nFail += !TestLInfAgree<double>(1024, dim, 10);
 
         nTest++;
         nFail += !TestL1Agree<float>(1024, dim, 10);
-        nTest++;
-        nFail += !TestL1Agree<double>(1024, dim, 10);
 
         nTest++;
         nFail += !TestL2Agree<float>(1024, dim, 10);
+
         nTest++;
-        nFail += !TestL2Agree<double>(1024, dim, 10);
+        nFail += !TestL2SqrExtSSEAgree(1024, dim, 10);
 
         nTest++;
         nFail += !TestKLAgree<float>(1024, dim, 10);
-        nTest++;
-        nFail += !TestKLAgree<double>(1024, dim, 10);
 
         nTest++;
         nFail += !TestItakuraSaitoAgree<float>(1024, dim, 10);
-        nTest++;
-        nFail += !TestItakuraSaitoAgree<double>(1024, dim, 10);
     }
 
     LOG(LIB_INFO) << nTest << " (sub) tests performed " << nFail << " failed";
 
     EXPECT_EQ(0, nFail);
 }
+
+#ifdef DISABLE_LONG_TESTS
+TEST(DISABLE_TestAgreePivotIndex) {
+#else
+TEST(TestAgreePivotIndex) {
+#endif
+    int nTest  = 0;
+    int nFail = 0;
+
+    const size_t dataQty = 1000;
+    const size_t pivotQty = 100;
+
+    vector<string> vDataFiles = {"sparse_5K.txt", "sparse_wiki_5K.txt"}; 
+    vector<string> vSpaces = {SPACE_SPARSE_COSINE_SIMILARITY_FAST, SPACE_SPARSE_ANGULAR_DISTANCE_FAST, 
+                              SPACE_SPARSE_NEGATIVE_SCALAR_FAST, SPACE_SPARSE_QUERY_NORM_NEGATIVE_SCALAR_FAST};
+    const string pivotFile = "sparse_pivots1K_termQty5K_maxId_100K.txt";
+
+    for (string spaceName : vSpaces)
+      for (string dataFile : vDataFiles) {
+        // 1. test with a dummy pivot index
+        nTest++;
+        nFail += !TestPivotIndex(spaceName, true, sampleDataPrefix + dataFile, dataQty, sampleDataPrefix + pivotFile, pivotQty);
+
+        // 2. test with a real pivot index
+        nTest++;
+        nFail += !TestPivotIndex(spaceName, false, sampleDataPrefix + dataFile, dataQty, sampleDataPrefix + pivotFile, pivotQty);
+    }
+
+    LOG(LIB_INFO) << nTest << " (sub) tests performed " << nFail << " failed";
+
+    EXPECT_EQ(0, nFail);
+}
+
 
 }  // namespace similarity
 

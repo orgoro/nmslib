@@ -1,13 +1,12 @@
 /**
  * Non-metric Space Library
  *
- * Authors: Bilegsaikhan Naidan (https://github.com/bileg), Leonid Boytsov (http://boytsov.info).
- * With contributions from Lawrence Cayton (http://lcayton.com/) and others.
+ * Main developers: Bilegsaikhan Naidan, Leonid Boytsov, Yury Malkov, Ben Frederickson, David Novak
  *
  * For the complete list of contributors and further details see:
- * https://github.com/searchivarius/NonMetricSpaceLib 
- * 
- * Copyright (c) 2014
+ * https://github.com/nmslib/nmslib
+ *
+ * Copyright (c) 2013-2018
  *
  * This code is released under the
  * Apache License Version 2.0 http://www.apache.org/licenses/.
@@ -18,6 +17,7 @@
 
 #include <string>
 #include "object.h"
+#include "my_isnan_isinf.h"
 
 namespace similarity {
 
@@ -33,9 +33,10 @@ void ComputeIntrinsicDimensionality(const Space<dist_t>& space,
                                double& IntrDim,
                                double& DistMean,
                                double& DistSigma,
+                               std::vector<double>& dist,
                                size_t SampleQty = 1000000) {
-  std::vector<double> dist;
   DistMean = 0;
+  dist.clear();
   for (size_t n = 0; n < SampleQty; ++n) {
     size_t r1 = RandomInt() % dataset.size();
     size_t r2 = RandomInt() % dataset.size();
@@ -45,7 +46,7 @@ void ComputeIntrinsicDimensionality(const Space<dist_t>& space,
     const Object* obj2 = dataset[r2];
     dist_t d = space.IndexTimeDistance(obj1, obj2);
     dist.push_back(d);
-    if (ISNAN(d)) {
+    if (my_isnan(d)) {
       /* 
        * TODO: @leo Dump object contents here. To this end,
        *            we need to subclass objects, so that sparse
@@ -70,6 +71,7 @@ template <typename dist_t>
 void ReportIntrinsicDimensionality(const string& reportName,
                                    const Space<dist_t>& space, 
                                    const ObjectVector& dataset,
+                                   std::vector<double>& dist,
                                    size_t SampleQty = 1000000) {
     double DistMean, DistSigma, IntrDim;
 
@@ -77,6 +79,7 @@ void ReportIntrinsicDimensionality(const string& reportName,
                                   IntrDim,
                                   DistMean,
                                   DistSigma,
+                                  dist,
                                   SampleQty);
 
     LOG(LIB_INFO) << "### " << reportName;
